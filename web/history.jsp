@@ -111,21 +111,26 @@ document.domReady.push(function() {domReadyHistory();});
             int count=0;
             for (HistoryEntry entry : hist.getHistoryEntries()) {
                 String rev = entry.getRevision();
+                String revDisplay;
                 if (rev == null || rev.length() == 0) {
                     rev = "";
+                }
+                revDisplay = rev;
+                if (rev.length() == 40) {
+                    revDisplay = rev.substring(0,7);
                 }
     %>
         <tr><%
                 if (cfg.isDir()) {
             %>
-            <td><%= rev %></td><%
+            <td><%= revDisplay %></td><%
                 } else {
                     if (entry.isActive()) {
                         String rp = uriEncodedName;
             %>
             <td><a name="<%= rev %>" href="<%=
                 context + Prefix.XREF_P + rp + "?r=" + Util.URIEncode(rev) %>"><%=
-                    rev %></a></td>
+                    revDisplay %></a></td>
             <td>
                 <input type="radio"<%
                         if (count == 0 ) {
