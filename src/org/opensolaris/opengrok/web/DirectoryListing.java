@@ -74,9 +74,9 @@ public class DirectoryListing {
             out.write(dateFormatter.format(lastm));
         }
         out.write("</td><td>");
-        // if (isDir) {
+        if (child.isDirectory()) {
             out.write(Util.readableSize(child.length()));
-        // }
+        }
         out.write("</td>");
     }
 
