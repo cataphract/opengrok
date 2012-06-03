@@ -41,16 +41,18 @@ import org.opensolaris.opengrok.index.IgnoredNames;
 public class DirectoryListing {
 
     private final EftarFileReader desc;
-    private final long now;
+    private final String now;
+    //this makes this class not thread safe
+    private final SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMdd");
 
     public DirectoryListing() {
-        desc = null;
-        now = System.currentTimeMillis();
+        this.desc = null;
+        this.now = this.sdf.format(System.currentTimeMillis());
     }
 
     public DirectoryListing(EftarFileReader desc) {
         this.desc = desc;
-        now = System.currentTimeMillis();
+        this.now = this.sdf.format(System.currentTimeMillis());
     }
 
     /**
@@ -68,7 +70,7 @@ public class DirectoryListing {
         long lastm = child.lastModified();
 
         out.write("<td>");
-        if (now - lastm < 86400000) {
+        if (this.sdf.format(lastm).equals(this.now)) {
             out.write("Today");
         } else {
             out.write(dateFormatter.format(lastm));
