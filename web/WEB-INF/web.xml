@@ -14,6 +14,25 @@
     <param-value>localhost:2424</param-value>
     <description>An address where OpenGrok can receive new configuration</description>
   </context-param>
+  
+  <!-- Filter that allows changing the context used to synthetize the links
+       This is useful if the application is behind a reverse proxy with a
+       different relative path -->
+  <!--
+  <filter>
+    <filter-name>contextoverride</filter-name>
+    <filter-class>org.opensolaris.opengrok.web.ContextOverrideFilter</filter-class>
+    <init-param>
+      <param-name>fakeContext</param-name>
+      <param-value>/fake</param-value>
+    </init-param>
+  </filter>
+
+  <filter-mapping>
+    <filter-name>contextoverride</filter-name>
+    <url-pattern>/*</url-pattern>
+  </filter-mapping>
+  -->
 
   <listener>
    <listener-class>org.opensolaris.opengrok.web.WebappListener</listener-class>
