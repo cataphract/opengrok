@@ -38,6 +38,10 @@ import java.net.UnknownHostException;
 import java.util.Date;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -49,6 +53,10 @@ import org.opensolaris.opengrok.index.IgnoredNames;
 import org.opensolaris.opengrok.util.Executor;
 import org.opensolaris.opengrok.util.IOUtils;
 
+import org.apache.lucene.search.*;
+import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.store.FSDirectory;
+
 /**
  * The RuntimeEnvironment class is used as a placeholder for the current
  * configuration this execution context (classloader) is using.
@@ -56,6 +64,23 @@ import org.opensolaris.opengrok.util.IOUtils;
 public final class RuntimeEnvironment {
     private Configuration configuration;
     private final ThreadLocal<Configuration> threadConfig;
+	private final ConcurrentHashMap<File, SearcherManager> searcherManagerMap =
+			new ConcurrentHashMap<File, SearcherManager>();
+	
+	private final ExecutorService searchThreadPool =
+			Executors.newFixedThreadPool(
+					2 + (2 * Runtime.getRuntime().availableProcessors()),
+					new ThreadFactory() {
+						private ThreadGroup group = new ThreadGroup("search-pool");
+						private int i = 1;
+						@Override
+						public synchronized Thread newThread(Runnable r) {
+							Thread ret = new Thread(group, r,
+									"search-pool-thread-" + i++);
+							ret.setDaemon(true);
+							return ret;
+						}
+					});
 
     private static final Logger log = Logger.getLogger(RuntimeEnvironment.class.getName());
 
@@ -81,6 +106,31 @@ public final class RuntimeEnvironment {
             }
         };
     }
+
+	public ExecutorService getSearchThreadPool() {
+		return this.searchThreadPool;
+	}
+	
+	public SearcherManager fetchSearchManager(File index) throws IOException {
+		SearcherManager sm = this.searcherManagerMap.get(index);
+		final ExecutorService searchThreadPool = this.searchThreadPool;
+		if (sm == null) {
+			sm = new SearcherManager(FSDirectory.open(index),
+					new SearcherFactory() {
+						@Override public IndexSearcher newSearcher(
+								IndexReader r) throws IOException {
+							return new IndexSearcher(r, searchThreadPool);
+						}
+					});
+			if (this.searcherManagerMap.putIfAbsent(index, sm) != null) {
+				IOUtils.close(sm);
+				sm = this.searcherManagerMap.get(index);
+			}
+		} else {
+			sm.maybeRefresh();
+		}
+		return sm;
+	}
 
     private String getCanonicalPath(String s) {
         try {

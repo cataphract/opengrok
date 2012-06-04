@@ -28,6 +28,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.SortedSet;
 import java.util.concurrent.ExecutorService;
@@ -45,6 +46,7 @@ import org.apache.lucene.store.FSDirectory;
 import org.opensolaris.opengrok.OpenGrokLogger;
 import org.opensolaris.opengrok.analysis.CompatibleAnalyser;
 import org.opensolaris.opengrok.analysis.Definitions;
+import org.opensolaris.opengrok.configuration.RuntimeEnvironment;
 import org.opensolaris.opengrok.search.QueryBuilder;
 import org.opensolaris.opengrok.search.Summarizer;
 import org.opensolaris.opengrok.search.context.Context;
@@ -98,6 +100,12 @@ public class SearchHelper {
     /** the searcher used to open/search the index. Automatically set via
      * {@link #prepareExec(SortedSet)}. */
     public IndexSearcher searcher;
+	/** search managers that have to have IndexSearchers releases */
+	public List<SearcherManager> searcherManagerRelease =
+			new ArrayList<SearcherManager>();
+	/** IndexSearchers that have to be released from the searchManagers */
+	public List<IndexSearcher> indexSearcherRelease =
+			new ArrayList<IndexSearcher>();
     /** list of docs which result from the executing the query */
     public ScoreDoc[] hits;
     /** total number of hits */
@@ -162,15 +170,21 @@ public class SearchHelper {
             }
             this.projects = projects;
             File indexDir = new File(dataRoot, "index");
+			SearcherManager sm;
             if (projects.isEmpty()) {
                 //no project setup
-                FSDirectory dir = FSDirectory.open(indexDir);
-                searcher = new IndexSearcher(IndexReader.open(dir));
+				sm = RuntimeEnvironment.getInstance()
+						.fetchSearchManager(indexDir);
+				this.searcherManagerRelease.add(sm);
+                this.searcher = sm.acquire();
+				this.indexSearcherRelease.add(this.searcher);
             } else if (projects.size() == 1) {
                 // just 1 project selected
-                FSDirectory dir =
-                        FSDirectory.open(new File(indexDir, projects.first()));
-                searcher = new IndexSearcher(IndexReader.open(dir));
+				sm = RuntimeEnvironment.getInstance().fetchSearchManager(
+						new File(indexDir, projects.first()));
+				this.searcherManagerRelease.add(sm);
+                this.searcher = sm.acquire();
+				this.indexSearcherRelease.add(this.searcher);
             } else {
                 //more projects                                
                 IndexReader[] subreaders=new IndexReader[projects.size()];
@@ -178,14 +192,19 @@ public class SearchHelper {
                 //TODO might need to rewrite to Project instead of
                 // String , need changes in projects.jspf too
                 for (String proj : projects) {
-                    FSDirectory dir = FSDirectory.open(new File(indexDir, proj));
-                    subreaders[ii++] = IndexReader.open(dir);
+					new File(indexDir, proj);
+					sm = RuntimeEnvironment.getInstance().fetchSearchManager(
+							new File(indexDir, projects.first()));
+					this.searcherManagerRelease.add(sm);
+					IndexSearcher is = sm.acquire();
+					this.indexSearcherRelease.add(is);
+                    subreaders[ii++] = is.getIndexReader();
                 }
                 MultiReader searchables=new MultiReader(subreaders, true);
                 ExecutorService executor=null; 
                 if (parallel) {
-                    int noThreads = 2 + (2 * Runtime.getRuntime().availableProcessors()); //TODO there might be a better way for counting this
-                    executor= Executors.newFixedThreadPool(noThreads);
+                    executor= RuntimeEnvironment.getInstance()
+							.getSearchThreadPool();
                 }
                 searcher = parallel
                         ? new IndexSearcher(searchables,executor)
@@ -418,6 +437,18 @@ public class SearchHelper {
      * the used {@link #searcher}).
      */
     public void destroy() {
-        IOUtils.close(searcher);
+		if (this.indexSearcherRelease.size() > 1) {
+			IOUtils.close(searcher);
+		}
+
+		for (int i = 0; i < this.indexSearcherRelease.size(); i++) {
+			try {
+				this.searcherManagerRelease.get(i).release(
+						this.indexSearcherRelease.get(i));
+			} catch (IOException e) {
+				log.log(Level.WARNING, "Failed to release index searcher: ", e);
+			}
+		}
+		
     }
 }
