@@ -109,6 +109,7 @@ public final class Configuration {
     private boolean chattyStatusPage;
     private final Map<String,String> cmds;
     private int tabSize;
+    private int searchPollSize;
     private static final Logger logger = Logger.getLogger(Configuration.class.getName());
 
     /**
@@ -131,6 +132,21 @@ public final class Configuration {
      */
     public void setTabSize(int tabSize) {
         this.tabSize = tabSize;
+    }
+
+    public int getSearchPollSize() {
+        return searchPollSize;
+    }
+
+    /**
+     * Sets the size of the thread pool that will be used to search the indexes.
+     * Changing this on runtime by sending a new configuration has no effect.
+     * 
+     * @param searchPollSize the size of the pool or a non-positive number for
+     * the default to be used.
+     */
+    public void setSearchPollSize(int searchPollSize) {
+        this.searchPollSize = searchPollSize;
     }
 
     public int getScanningDepth() {
@@ -176,6 +192,7 @@ public final class Configuration {
         setScanningDepth(3); // default depth of scanning for repositories
         setAllowedSymlinks(new HashSet<String>());
         //setTabSize(4);
+        setSearchPollSize(0); //auto
         cmds = new HashMap<String, String>();
     }
 

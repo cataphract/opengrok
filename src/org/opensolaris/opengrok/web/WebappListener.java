@@ -34,6 +34,7 @@ import javax.servlet.ServletContextEvent;
 import javax.servlet.ServletContextListener;
 import org.opensolaris.opengrok.OpenGrokLogger;
 import org.opensolaris.opengrok.configuration.RuntimeEnvironment;
+import org.opensolaris.opengrok.search.SearcherCache;
 
 /**
  * Populate the Mercurial Repositories
@@ -41,6 +42,8 @@ import org.opensolaris.opengrok.configuration.RuntimeEnvironment;
  */
 public final class WebappListener implements ServletContextListener {
 
+    public static final String SEARCHER_CACHE_ATTRIBUTE = "searcher_cache";
+    
     @Override
     public void contextInitialized(final ServletContextEvent servletContextEvent) {
         ServletContext context = servletContextEvent.getServletContext();
@@ -79,6 +82,9 @@ public final class WebappListener implements ServletContextListener {
                 }
             }
         }
+        
+        context.setAttribute(SEARCHER_CACHE_ATTRIBUTE,
+                new SearcherCache(env.getConfiguration().getSearchPollSize()));
     }
 
     @Override

@@ -43,6 +43,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
+import javax.servlet.ServletContext;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 
@@ -1122,10 +1123,11 @@ public final class PageConfig {
      * <p>
      * This method stops populating fields as soon as an error occurs.
      *
+     * @param context The servlet context
      * @return a search helper.
      */
-    public SearchHelper prepareSearch() {
-        SearchHelper sh = new SearchHelper();
+    public SearchHelper prepareSearch(ServletContext context) {
+        SearchHelper sh = new SearchHelper(context);
         sh.dataRoot = getDataRoot(); // throws Exception if none-existent
         List<SortOrder> sortOrders = getSortOrder();
         sh.order = sortOrders.isEmpty() ? SortOrder.RELEVANCY : sortOrders.get(0);

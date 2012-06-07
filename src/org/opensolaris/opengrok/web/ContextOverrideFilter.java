@@ -21,7 +21,7 @@ public class ContextOverrideFilter implements Filter {
         ContextOverrideWrapper(HttpServletRequest request) {
             super(request);
         }
-        
+
         @Override
         public String getContextPath() {
             return ContextOverrideFilter.this.fakedContext;
@@ -30,6 +30,7 @@ public class ContextOverrideFilter implements Filter {
     
     @Override
     public void init(FilterConfig config) throws ServletException {
+        @SuppressWarnings("unchecked")
         Enumeration<String> en = config.getInitParameterNames();
         while (en.hasMoreElements()) {
             String name = en.nextElement();
@@ -37,7 +38,7 @@ public class ContextOverrideFilter implements Filter {
                 throw new ServletException("Invalid filter init param name: "
                     + name);
             }
-            this.fakedContext = config.getInitParameter(name);;
+            this.fakedContext = config.getInitParameter(name);
         }
         if (this.fakedContext == null) {
             throw new ServletException("The init param '" +
