@@ -84,7 +84,7 @@ public final class WebappListener implements ServletContextListener {
         }
         
         context.setAttribute(SEARCHER_CACHE_ATTRIBUTE,
-                new SearcherCache(env.getConfiguration().getSearchPollSize()));
+                new SearcherCache(env.getConfiguration().getSearchPoolSize()));
     }
 
     @Override
