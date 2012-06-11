@@ -218,7 +218,7 @@ public class SearcherCache {
         
         isDestroyed = true;
         
-        searchThreadPool.shutdownNow();
+        searchThreadPool.shutdown();
         
         //shutdown the searcher managers
         for (Entry<File, SearcherManager> e : searcherManagerMap.entrySet()) {
