@@ -19,13 +19,20 @@
 
 package org.opensolaris.opengrok.search;
 
+import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.MultiReader;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.SearcherFactory;
 import org.apache.lucene.search.SearcherManager;
@@ -38,11 +45,81 @@ import org.opensolaris.opengrok.util.IOUtils;
  * the searches can be executed.
  */
 public class SearcherCache {
+    
+    private static final Logger log =
+            Logger.getLogger(SearcherCache.class.getName());
 
     private final ConcurrentHashMap<File, SearcherManager> searcherManagerMap =
             new ConcurrentHashMap<File, SearcherManager>();
 
     private final ExecutorService searchThreadPool;
+
+    private final SearcherFactory searcherFactory;
+    
+    private boolean isDestroyed = false;
+    
+    public abstract class SearcherWithCleanup implements Closeable {
+
+        protected IndexSearcher searcher;
+        
+        public IndexSearcher getSearcher() {
+            return searcher;
+        }
+
+    }
+    
+    private class SimpleSearcherWithCleanup extends SearcherWithCleanup {
+
+        private SearcherManager sm;
+
+        public SimpleSearcherWithCleanup(SearcherManager sm) {
+            this.searcher = sm.acquire();
+            this.sm = sm;
+        }
+
+        @Override
+        public void close() throws IOException {
+            sm.release(getSearcher());
+        }
+
+    }
+    
+    private class MultiSearcherWithCleanup extends SearcherWithCleanup {
+        
+        private List<SearcherManager> sms;
+        private List<IndexSearcher> searchers;
+        
+        public MultiSearcherWithCleanup(List<SearcherManager> sms) {
+            this.searchers = new ArrayList<IndexSearcher>(sms.size());
+            this.sms = sms;
+            
+            IndexReader readers[] = new IndexReader[sms.size()];
+            
+            for (int i = 0; i < sms.size(); i++) {
+                IndexSearcher searcher = sms.get(i).acquire();
+                this.searchers.add(searcher);
+                readers[i] = searcher.getIndexReader();
+            }
+            
+            this.searcher = new IndexSearcher(
+                    new MultiReader(readers, false), searchThreadPool);
+            this.sms = sms;
+        }
+
+        @Override
+        public void close() throws IOException {
+            IOUtils.close(searcher);
+
+            for (int i = 0; i < sms.size(); i++) {
+                try {
+                    sms.get(i).release(searchers.get(i));
+                } catch (IOException e) {
+                    log.log(Level.WARNING, "Failed to release index searcher: ", e);
+                }
+            }
+        }
+
+    }
 
     public SearcherCache(int numSearchThreads) {
         if (numSearchThreads <= 0) {
@@ -50,7 +127,7 @@ public class SearcherCache {
                     2 + (2 * Runtime.getRuntime().availableProcessors());
         }
 
-        this.searchThreadPool =
+        searchThreadPool =
             Executors.newFixedThreadPool(
                     numSearchThreads,
                     new ThreadFactory() {
@@ -65,27 +142,43 @@ public class SearcherCache {
                             return ret;
                         }
                     });
+        
+        searcherFactory = new SearcherFactory() {
+            @Override public IndexSearcher newSearcher(IndexReader r)
+                    throws IOException {
+                return new IndexSearcher(r, searchThreadPool);
+            }
+        };
+    }
+    
+    public SearcherWithCleanup fetchIndexSearcher(File index)
+            throws IOException {
+        
+        return new SimpleSearcherWithCleanup(fetchSearchManager(index));
+    }
+    
+    public SearcherWithCleanup fetchIndexSearcher(File indexes[])
+            throws IOException {
+        
+        List<SearcherManager> sms =
+                new ArrayList<SearcherManager>(indexes.length);
+        
+        for (int i = 0; i < indexes.length; i++) {
+            sms.add(fetchSearchManager(indexes[i]));
+        }
+        
+        return new MultiSearcherWithCleanup(sms);
     }
 
-    public ExecutorService getSearchThreadPool() {
-        return this.searchThreadPool;
-    }
-
-    public SearcherManager fetchSearchManager(File index) throws IOException {
-        SearcherManager sm = this.searcherManagerMap.get(index);
+    private SearcherManager fetchSearchManager(File index) throws IOException {
+        SearcherManager sm = searcherManagerMap.get(index);
         if (sm == null) {
-            sm = new SearcherManager(FSDirectory.open(index),
-                    new SearcherFactory() {
-                        @Override public IndexSearcher newSearcher(
-                                IndexReader r) throws IOException {
-                            return new IndexSearcher(r,
-                                    SearcherCache.this.searchThreadPool);
-                        }
-                    });
-            if (this.searcherManagerMap.putIfAbsent(index, sm) != null) {
+            sm = new SearcherManager(FSDirectory.open(index), searcherFactory);
+                    
+            if (searcherManagerMap.putIfAbsent(index, sm) != null) {
                 /* another thread opened the index in the meantime */
                 IOUtils.close(sm);
-                sm = this.searcherManagerMap.get(index);
+                sm = searcherManagerMap.get(index);
             }
         } else {
             /* a better way would be to maybeRefresh periodically in another
@@ -96,6 +189,39 @@ public class SearcherCache {
         }
 
         return sm;
+    }
+    
+    /**
+     * Destroy this cache. It should have been taken out of service before.
+     */
+    public void destroy() {
+        if (isDestroyed) {
+            throw new IllegalStateException(
+                    "This object has already been destroyed");
+        }
+        
+        isDestroyed = true;
+        
+        searchThreadPool.shutdownNow();
+        
+        //shutdown the searcher managers
+        for (Entry<File, SearcherManager> e : searcherManagerMap.entrySet()) {
+            IOUtils.close(e.getValue());
+        }
+        
+    }
+
+    @Override
+    protected void finalize() throws Throwable {
+        super.finalize();
+        
+        //limit damage in case a logic error prevents the searcher cache from
+        //being destroyed
+        
+        if (!isDestroyed) {
+            log.log(Level.WARNING, "Object not destroyed upon finalization.");
+            destroy();
+        }
     }
 
 }
