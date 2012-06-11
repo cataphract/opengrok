@@ -58,7 +58,7 @@ include file="projects.jspf"
 
     long starttime = System.currentTimeMillis();
 
-    SearchHelper searchHelper = cfg.prepareSearch(getServletContext())
+    SearchHelper searchHelper = cfg.prepareSearch()
         .prepareExec(cfg.getRequestedProjects()).executeQuery().prepareSummary();
     if (searchHelper.redirect != null) {
         response.sendRedirect(searchHelper.redirect);

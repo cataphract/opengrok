@@ -83,9 +83,6 @@ public class SearchHelper {
     public QueryBuilder builder;
     /** the order to use to ordery query results */
     public SortOrder order;
-    /** if {@code true} a {@link ParallelMultiSearcher} will be used instead of
-     * a {@link MultiSearcher}. */
-    public boolean parallel;
     /** Indicate, whether this is search from a cross reference. If {@code true}
      * {@link #executeQuery()} sets {@link #redirect} if certain conditions are
      * met. */
@@ -132,13 +129,9 @@ public class SearchHelper {
     
     private SearcherCache searcherCache;
     
-    public SearchHelper(ServletContext context) {
-        this.searcherCache = (SearcherCache)context.getAttribute(
-                WebappListener.SEARCHER_CACHE_ATTRIBUTE);
-        if (this.searcherCache == null) {
-            throw new IllegalStateException("The ServletContext attribute "
-                    + WebappListener.SEARCHER_CACHE_ATTRIBUTE + " is not set!");
-        }
+    public SearchHelper() {
+        this.searcherCache =
+                RuntimeEnvironment.getInstance().getSearcherCache();
     }
     
     /**

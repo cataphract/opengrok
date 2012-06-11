@@ -29,6 +29,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.apache.lucene.index.IndexReader;
@@ -207,6 +208,13 @@ public class SearcherCache {
         return sm;
     }
     
+    public boolean awaitTasksTermination(int waitSeconds)
+            throws InterruptedException {
+        
+        searchThreadPool.shutdown();
+        return searchThreadPool.awaitTermination(waitSeconds, TimeUnit.SECONDS);
+    }
+    
     /**
      * Destroy this cache. It should have been taken out of service before.
      */
@@ -218,7 +226,7 @@ public class SearcherCache {
         
         isDestroyed = true;
         
-        searchThreadPool.shutdown();
+        searchThreadPool.shutdownNow();
         
         //shutdown the searcher managers
         for (Entry<File, SearcherManager> e : searcherManagerMap.entrySet()) {

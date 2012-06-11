@@ -1123,11 +1123,10 @@ public final class PageConfig {
      * <p>
      * This method stops populating fields as soon as an error occurs.
      *
-     * @param context The servlet context
      * @return a search helper.
      */
-    public SearchHelper prepareSearch(ServletContext context) {
-        SearchHelper sh = new SearchHelper(context);
+    public SearchHelper prepareSearch() {
+        SearchHelper sh = new SearchHelper();
         sh.dataRoot = getDataRoot(); // throws Exception if none-existent
         List<SortOrder> sortOrders = getSortOrder();
         sh.order = sortOrders.isEmpty() ? SortOrder.RELEVANCY : sortOrders.get(0);
@@ -1144,8 +1143,6 @@ public final class PageConfig {
         sh.start = getSearchStart();
         sh.maxItems = getSearchMaxItems();
         sh.contextPath = req.getContextPath();
-        // jel: this should be IMHO a config param since not only core dependend
-        sh.parallel = Runtime.getRuntime().availableProcessors() > 1;
         sh.isCrossRefSearch = getPrefix() == Prefix.SEARCH_R;
         sh.compressed = env.isCompressXref();
         sh.desc = getEftarReader();

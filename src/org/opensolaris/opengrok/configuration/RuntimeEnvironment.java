@@ -38,7 +38,6 @@ import java.net.UnknownHostException;
 import java.util.Date;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -47,6 +46,7 @@ import org.opensolaris.opengrok.history.HistoryGuru;
 import org.opensolaris.opengrok.history.RepositoryInfo;
 import org.opensolaris.opengrok.index.Filter;
 import org.opensolaris.opengrok.index.IgnoredNames;
+import org.opensolaris.opengrok.search.SearcherCache;
 import org.opensolaris.opengrok.util.Executor;
 import org.opensolaris.opengrok.util.IOUtils;
 
@@ -57,6 +57,8 @@ import org.opensolaris.opengrok.util.IOUtils;
 public final class RuntimeEnvironment {
     private Configuration configuration;
     private final ThreadLocal<Configuration> threadConfig;
+    
+    private volatile SearcherCache searcherCache;
 
     private static final Logger log = Logger.getLogger(RuntimeEnvironment.class.getName());
 
@@ -775,14 +777,60 @@ public final class RuntimeEnvironment {
         writeConfiguration(configServerSocket.getInetAddress(), configServerSocket.getLocalPort());
     }
 
-    public void setConfiguration(Configuration configuration) {
+    /**
+     * Replace the configuration. Also updates the thread local pointer to the
+     * configuration.
+     * 
+     * Calls here are serialized so SearcherCaches cannot leak.
+     * 
+     * @param configuration The new configuration.
+     */
+    public synchronized void setConfiguration(Configuration configuration) {
+        SearcherCache staleSearcherCache = null;
+        if (this.searcherCache != null && this.configuration != null &&
+                (this.configuration.getSearchPoolSize() != configuration.getSearchPoolSize()
+                || !this.configuration.getDataRoot().equals(configuration.getDataRoot()))) {
+            staleSearcherCache = this.searcherCache;
+        }
         this.configuration = configuration;
         register();
+        
+        if (staleSearcherCache != null) {
+            this.searcherCache = null;
+            try {
+                staleSearcherCache.awaitTasksTermination(10);
+            } catch (InterruptedException ex) {
+                // If interrupted, we just won't wait anymore for tasks to complete
+            }
+            staleSearcherCache.destroy();
+        }
+        
         HistoryGuru.getInstance().invalidateRepositories(configuration.getRepositories());
     }
 
     public Configuration getConfiguration() {
        return this.threadConfig.get();
+    }
+    
+    public SearcherCache getSearcherCache() {
+        if (this.searcherCache == null) {
+            synchronized (this) {
+                if (this.searcherCache == null) {
+                    this.searcherCache = new SearcherCache(
+                            this.configuration.getSearchPoolSize());
+                }
+            }
+        }
+
+        return this.searcherCache;
+    }
+    
+    /**
+     * Destroys the searcher cache without waiting.
+     * To be called on application shutdown.
+     */
+    public void destroySearcherCache() {
+        this.searcherCache.destroy();
     }
 
     private ServerSocket configServerSocket;
