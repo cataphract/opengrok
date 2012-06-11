@@ -40,7 +40,7 @@ import org.opensolaris.opengrok.configuration.RuntimeEnvironment;
  * @author Trond Norbye
  */
 public final class WebappListener implements ServletContextListener {
-    
+
     @Override
     public void contextInitialized(final ServletContextEvent servletContextEvent) {
         ServletContext context = servletContextEvent.getServletContext();
