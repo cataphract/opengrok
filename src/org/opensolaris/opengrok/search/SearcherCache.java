@@ -101,8 +101,13 @@ public class SearcherCache {
                 readers[i] = searcher.getIndexReader();
             }
             
-            this.searcher = new IndexSearcher(
-                    new MultiReader(readers, false), searchThreadPool);
+            if (searchThreadPool != null) {
+                this.searcher = new IndexSearcher(
+                        new MultiReader(readers, false), searchThreadPool);
+            } else {
+                this.searcher = new IndexSearcher(
+                        new MultiReader(readers, false));
+            }
             this.sms = sms;
         }
 
@@ -122,33 +127,44 @@ public class SearcherCache {
     }
 
     public SearcherCache(int numSearchThreads) {
-        if (numSearchThreads <= 0) {
+        if (numSearchThreads < 0) {
             numSearchThreads =
                     2 + (2 * Runtime.getRuntime().availableProcessors());
         }
 
-        searchThreadPool =
-            Executors.newFixedThreadPool(
-                    numSearchThreads,
-                    new ThreadFactory() {
-                        private ThreadGroup group = new ThreadGroup("search-pool");
-                        private int i = 1;
+        if (numSearchThreads != 0) {
+            searchThreadPool =
+                Executors.newFixedThreadPool(
+                        numSearchThreads,
+                        new ThreadFactory() {
+                            private ThreadGroup group = new ThreadGroup("search-pool");
+                            private int i = 1;
 
-                        @Override
-                        public synchronized Thread newThread(Runnable r) {
-                            Thread ret = new Thread(group, r,
-                                    "search-pool-thread-" + i++);
-                            ret.setDaemon(true);
-                            return ret;
-                        }
-                    });
+                            @Override
+                            public synchronized Thread newThread(Runnable r) {
+                                Thread ret = new Thread(group, r,
+                                        "search-pool-thread-" + i++);
+                                ret.setDaemon(true);
+                                return ret;
+                            }
+                        });
+            searcherFactory = new SearcherFactory() {
+                @Override public IndexSearcher newSearcher(IndexReader r)
+                        throws IOException {
+                    return new IndexSearcher(r, searchThreadPool);
+                }
+            };
+        } else {
+            /* don't use a thread pool */
+            searchThreadPool = null;
+            searcherFactory = new SearcherFactory() {
+                @Override public IndexSearcher newSearcher(IndexReader r)
+                        throws IOException {
+                    return new IndexSearcher(r);
+                }
+            };
+        }
         
-        searcherFactory = new SearcherFactory() {
-            @Override public IndexSearcher newSearcher(IndexReader r)
-                    throws IOException {
-                return new IndexSearcher(r, searchThreadPool);
-            }
-        };
     }
     
     public SearcherWithCleanup fetchIndexSearcher(File index)

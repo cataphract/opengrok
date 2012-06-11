@@ -142,8 +142,8 @@ public final class Configuration {
      * Sets the size of the thread pool that will be used to search the indexes.
      * Changing this on runtime by sending a new configuration has no effect.
      * 
-     * @param searchPoolSize the size of the pool or a non-positive number for
-     * the default to be used.
+     * @param searchPoolSize the size of the pool, a negative number for
+     * the default to be used, or 0 for no thread pool to be used.
      */
     public void setSearchPoolSize(int searchPoolSize) {
         this.searchPoolSize = searchPoolSize;
@@ -192,7 +192,7 @@ public final class Configuration {
         setScanningDepth(3); // default depth of scanning for repositories
         setAllowedSymlinks(new HashSet<String>());
         //setTabSize(4);
-        setSearchPoolSize(0); //auto
+        setSearchPoolSize(-1); //auto
         cmds = new HashMap<String, String>();
     }
 
