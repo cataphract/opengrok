@@ -37,8 +37,7 @@ import java.util.Stack;
 %ignorecase
 %int
 %{
-  private final Stack<Integer> stateStack = new Stack<Integer>();
-  private final Stack<String> styleStack = new Stack<String>();
+  private String currentSpan;
 
   // State variables for the HEREDOC state. They tell what the stop word is,
   // and whether leading tabs should be removed from the input lines before
@@ -49,8 +48,9 @@ import java.util.Stack;
   @Override
   public void reInit(char[] contents, int length) {
     super.reInit(contents, length);
-    stateStack.clear();
-    styleStack.clear();
+    stack.clear();
+    stackPopString.clear();
+    currentSpan = null;
   }
 
   // TODO move this into an include file when bug #16053 is fixed
@@ -60,31 +60,26 @@ import java.util.Stack;
   protected void setLineNumber(int x) { yyline = x; }
 
   private void pushstate(int state, String style) throws IOException {
-    if (!styleStack.empty()) {
+    if (!stack.empty()) {
       out.write("</span>");
     }
+    String newCurrentSpan;
     if (style == null) {
-      out.write("<span>");
+      newCurrentSpan = "<span>";
     } else {
-      out.write("<span class=\"" + style + "\">");
+      newCurrentSpan = "<span class=\"" + style + "\">";
     }
-    stateStack.push(yystate());
-    styleStack.push(style);
-    yybegin(state);
+    out.write(newCurrentSpan);
+
+    yypush(state, currentSpan);
+    currentSpan = newCurrentSpan;
   }
 
   private void popstate() throws IOException {
     out.write("</span>");
-    yybegin(stateStack.pop());
-    styleStack.pop();
-    if (!styleStack.empty()) {
-      String style = styleStack.peek();
-      if (style == null) {
-        out.write("<span>");
-      } else {
-        out.write("<span class=\"" + style + "\">");
-      }
-    }
+
+    currentSpan = stackPopString.peek();
+    yypop();
   }
 
   /**
@@ -306,7 +301,7 @@ Path = "/"? [a-zA-Z]{FNameChar}* ("/" [a-zA-Z]{FNameChar}*)+[a-zA-Z0-9]
 <<EOF>> {
     // If we reach EOF while being in a nested state, pop all the way up
     // the initial state so that we close open HTML tags.
-    while (!stateStack.isEmpty()) {
+    while (!stack.isEmpty()) {
         popstate();
     }
     return YYEOF;
