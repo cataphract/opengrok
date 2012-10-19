@@ -19,7 +19,7 @@
 
 /*
  * Copyright (c) 2011 Jens Elkner.
- * Copyright (c) 2011, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2011, 2012, Oracle and/or its affiliates. All rights reserved.
  */
 package org.opensolaris.opengrok.web;
 
@@ -108,7 +108,7 @@ public final class PageConfig {
     private File dataRoot;
     private StringBuilder headLines;
     private static final Logger log = Logger.getLogger(PageConfig.class.getName());
-    
+
     /**
      * Add the given data to the &lt;head&gt; section of the html page to
      * generate.
@@ -155,6 +155,12 @@ public final class PageConfig {
         data.rev = new String[2];
         data.file = new String[2][];
         data.param = new String[2];
+
+        /*
+         * Basically the request URI looks like this:
+         * http://$site/$webapp/diff/$resourceFile?r1=$fileA@$revA&r2=$fileB@$revB
+	 * The code below extracts file path and revision from the URI.
+         */
         for (int i = 1; i <= 2; i++) {
             String[] tmp = null;
             String p = req.getParameter("r" + i);
@@ -183,6 +189,12 @@ public final class PageConfig {
                 for (int i = 0; i < 2; i++) {
                     File f = new File(srcRoot + filepath[i]);
                     in[i] = HistoryGuru.getInstance().getRevision(f.getParent(), f.getName(), data.rev[i]);
+                    if (in[i] == null) {
+                        data.errorMsg = "Unable to get revision " +
+                            data.rev[i] + " for file: " +
+                            getResourceFile().getPath();
+                        return data;
+                    }
                 }
 
                 if (data.genre == null) {
@@ -985,7 +997,7 @@ public final class PageConfig {
     }
     
     private File checkFileResolve(File dir, String name, boolean compressed) {
-        File lresourceFile=new File(getSourceRootPath()+getPath(), name);
+        File lresourceFile = new File(getSourceRootPath()+getPath(), name);
             if (!lresourceFile.canRead()) {
                 lresourceFile = new File("/");
             }                
@@ -1062,7 +1074,7 @@ public final class PageConfig {
             }
             getPrefix();
             if (prefix != Prefix.XREF_P && prefix != Prefix.HIST_L) {
-                //if it is an existing dir perhaps people wanted dir xref
+                // if it is an existing dir perhaps people wanted dir xref
                 return req.getContextPath() + Prefix.XREF_P
                         + getUriEncodedPath() + trailingSlash(path);
             }

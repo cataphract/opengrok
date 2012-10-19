@@ -33,7 +33,9 @@ import java.sql.SQLException;
 import java.sql.SQLTransientException;
 import java.sql.Statement;
 import java.sql.Timestamp;
+import java.sql.Types;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -181,9 +183,8 @@ class JDBCHistoryCache implements HistoryCache {
     private void initDB(Statement s) throws SQLException {
         // TODO Store a database version which is incremented on each
         // format change. When a version change is detected, drop the database
-        // (or possibly in the future: add some upgrade code that makes the
-        // necessary changes between versions). For now, just check if the
-        // tables exist, and create them if necessary.
+        // or, if possible, upgrade the database to the new format. For now,
+        // check if the tables exist, and create them if necessary.
 
         DatabaseMetaData dmd = s.getConnection().getMetaData();
 
@@ -193,6 +194,15 @@ class JDBCHistoryCache implements HistoryCache {
 
         if (!tableExists(dmd, SCHEMA, "DIRECTORIES")) {
             s.execute(getQuery("createTableDirectories"));
+        }
+
+        // Databases created with 0.11 or earlier versions don't have a
+        // PARENT column in the DIRECTORIES table. If the column is missing,
+        // create it and populate it. Bug #3174.
+        if (!columnExists(dmd, SCHEMA, "DIRECTORIES", "PARENT")) {
+            s.execute(getQuery("alterTableDirectoriesParent"));
+            s.execute(getQuery("alterTableDirectoriesParentPathConstraint"));
+            fillDirectoriesParentColumn(s);
         }
 
         if (!tableExists(dmd, SCHEMA, "FILES")) {
@@ -241,11 +251,48 @@ class JDBCHistoryCache implements HistoryCache {
         info = infoBuilder.toString();
     }
 
+    /**
+     * Fill the PARENT column of the DIRECTORIES table with correct values.
+     * Used when upgrading a database from an old format that doesn't have
+     * the PARENT column.
+     */
+    private static void fillDirectoriesParentColumn(Statement s)
+            throws SQLException {
+        PreparedStatement update = s.getConnection().prepareStatement(
+                getQuery("updateDirectoriesParent"));
+        try {
+            ResultSet rs = s.executeQuery(getQuery("getAllDirectories"));
+            try {
+                while (rs.next()) {
+                    update.setInt(1, rs.getInt("REPOSITORY"));
+                    update.setString(2, getParentPath(rs.getString("PATH")));
+                    update.setInt(3, rs.getInt("ID"));
+                    update.executeUpdate();
+                }
+            } finally {
+                rs.close();
+            }
+        } finally {
+            update.close();
+        }
+    }
+
     private static boolean tableExists(
             DatabaseMetaData dmd, String schema, String table)
             throws SQLException {
         ResultSet rs = dmd.getTables(
                 null, schema, table, new String[] {"TABLE"});
+        try {
+            return rs.next();
+        } finally {
+            rs.close();
+        }
+    }
+
+    private static boolean columnExists(
+            DatabaseMetaData dmd, String schema, String table, String column)
+            throws SQLException {
+        ResultSet rs = dmd.getColumns(null, schema, table, column);
         try {
             return rs.next();
         } finally {
@@ -326,7 +373,7 @@ class JDBCHistoryCache implements HistoryCache {
                 try {
                     PreparedStatement ps = conn.getStatement(IS_DIR_IN_CACHE);
                     ps.setString(1, toUnixPath(repository.getDirectoryName()));
-                    ps.setString(2, getRelativePath(file, repository));
+                    ps.setString(2, getSourceRootRelativePath(file));
                     ResultSet rs = ps.executeQuery();
                     try {
                         return rs.next();
@@ -360,19 +407,6 @@ class JDBCHistoryCache implements HistoryCache {
         } catch (IOException ioe) {
             throw new HistoryException(ioe);
         }
-    }
-
-    /**
-     * Get the path of a file relative to the repository root.
-     * @param file the file to get the path for
-     * @param repository the repository
-     * @return relative path for {@code file} with unix file separators
-     */
-    private static String getRelativePath(File file, Repository repository)
-            throws HistoryException {
-        String filePath = toUnixPath(file);
-        String reposPath = toUnixPath(repository.getDirectoryName());
-        return getRelativePath(filePath, reposPath);
     }
 
     /**
@@ -1036,21 +1070,20 @@ class JDBCHistoryCache implements HistoryCache {
         String parent = unsplitPath(pathElts, pathElts.length - 1);
         Integer dir = map.get(parent);
         if (dir == null) {
-            for (int i = pathElts.length - 1; i >= 0; i--) {
+            for (int i = 0; i < pathElts.length; i++) {
+                Integer prevDirId = dir;
                 String path = unsplitPath(pathElts, i);
-                if (map.containsKey(path)) {
-                    // Assumption: If a directory already exists in the
-                    // database, all its parents also exist.
-                    break;
+                dir = map.get(path);
+                if (dir == null) {
+                    dir = nextDirId.getAndIncrement();
+                    ps.setInt(1, reposId);
+                    ps.setString(2, path);
+                    ps.setInt(3, dir);
+                    ps.setObject(4, prevDirId, Types.INTEGER);
+                    ps.executeUpdate();
+                    map.put(path, dir);
                 }
-                int dirId = nextDirId.getAndIncrement();
-                ps.setInt(1, reposId);
-                ps.setString(2, path);
-                ps.setInt(3, dirId);
-                ps.executeUpdate();
-                map.put(path, dirId);
             }
-            dir = map.get(parent);
         }
         return dir;
     }
@@ -1110,6 +1143,55 @@ class JDBCHistoryCache implements HistoryCache {
         } finally {
             connectionManager.releaseConnection(conn);
         }
+    }
+
+    @Override
+    public Map<String, Date> getLastModifiedTimes(
+            File directory, Repository repository)
+        throws HistoryException
+    {
+        try {
+            for (int i = 0;; i++) {
+                try {
+                    return getLastModifiedTimesForAllFiles(
+                            directory, repository);
+                } catch (SQLException sqle) {
+                    handleSQLException(sqle, i);
+                }
+            }
+        } catch (SQLException sqle) {
+            throw new HistoryException(sqle);
+        }
+    }
+
+    private static final PreparedQuery GET_LAST_MODIFIED_TIMES =
+            new PreparedQuery(getQuery("getLastModifiedTimes"));
+
+    private Map<String, Date> getLastModifiedTimesForAllFiles(
+            File directory, Repository repository)
+        throws HistoryException, SQLException
+    {
+        final Map<String, Date> map = new HashMap<String, Date>();
+
+        final ConnectionResource conn =
+                connectionManager.getConnectionResource();
+        try {
+            PreparedStatement ps = conn.getStatement(GET_LAST_MODIFIED_TIMES);
+            ps.setString(1, toUnixPath(repository.getDirectoryName()));
+            ps.setString(2, getSourceRootRelativePath(directory));
+            ResultSet rs = ps.executeQuery();
+            try {
+                while (rs.next()) {
+                    map.put(rs.getString(1), rs.getTimestamp(2));
+                }
+            } finally {
+                rs.close();
+            }
+        } finally {
+            connectionManager.releaseConnection(conn);
+        }
+
+        return map;
     }
 
     @Override
