@@ -18,7 +18,7 @@
  */
 
 /*
- * Copyright (c) 2008, 2012, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2008, 2013, Oracle and/or its affiliates. All rights reserved.
  *
  * Portions Copyright 2011 Jens Elkner.
  */
@@ -34,7 +34,6 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
-import org.opensolaris.opengrok.util.IOUtils;
 
 public class CommandLineOptions {
 
@@ -80,6 +79,7 @@ public class CommandLineOptions {
         options.add(new Option('D', null, "Store history cache in a database (needs the JDBC driver in the classpath, typically derbyclient.jar or derby.jar)"));
         options.add(new Option('d', "/path/to/data/root", "The directory where OpenGrok stores the generated data"));
         options.add(new Option('e', null, "Economical - consumes less disk space. It does not generate hyper text cross reference files offline, but will do so on demand - which could be sightly slow."));
+        options.add(new Option('G', null, "Assign commit tags to all entries in history for all repositories."));
         options.add(new Option('H', null, "Generate history cache for all repositories"));
         options.add(new Option('h', "/path/to/repository", "just generate history cache for the specified repos (absolute path from source root)"));
         options.add(new Option('I', "pattern", "Only files matching this pattern will be examined (supports wildcards, example: -I *.java -I *.c)"));
@@ -147,15 +147,14 @@ public class CommandLineOptions {
 
     public String getUsage() {
         StringWriter wrt = new StringWriter();
-        PrintWriter out = new PrintWriter(wrt);
+        try (PrintWriter out = new PrintWriter(wrt)) {
+            out.println("Usage: opengrok.jar [options]");
+            for (Option o : options) {
+                out.println(o.getUsage());
+            }
 
-        out.println("Usage: opengrok.jar [options]");
-        for (Option o : options) {
-            out.println(o.getUsage());
+            out.flush();
         }
-
-        out.flush();
-        IOUtils.close(out);
 
         return wrt.toString();
     }
@@ -163,39 +162,37 @@ public class CommandLineOptions {
     public String getManPage() throws IOException {
         StringWriter wrt = new StringWriter();
         PrintWriter out = new PrintWriter(wrt);
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                     getClass().getResourceAsStream("opengrok.xml"), "US-ASCII"))) {
+            spool(reader, out, "___INSERT_DATE___");
+            out.print("<refmiscinfo class=\"date\">");
+            out.print(DateFormat.getDateInstance(DateFormat.MEDIUM).format(new Date()));
+            out.println("</refmiscinfo>");
 
-        BufferedReader reader = new BufferedReader(new InputStreamReader(
-                getClass().getResourceAsStream("opengrok.xml"), "US-ASCII"));
-
-        spool(reader, out, "___INSERT_DATE___");
-        out.print("<refmiscinfo class=\"date\">");
-        out.print(DateFormat.getDateInstance(DateFormat.MEDIUM).format(new Date()));
-        out.println("</refmiscinfo>");
-
-        spool(reader, out, "___INSERT_USAGE___");
-        for (Option o : options) {
-            out.println("<optional><option>");
-            out.print(o.option);
-            if (o.argument != null) {
-                out.print(" <replaceable>");
-                out.print(o.argument);
-                out.print("</replaceable>");
+            spool(reader, out, "___INSERT_USAGE___");
+            for (Option o : options) {
+                out.println("<optional><option>");
+                out.print(o.option);
+                if (o.argument != null) {
+                    out.print(" <replaceable>");
+                    out.print(o.argument);
+                    out.print("</replaceable>");
+                }
+                out.println("</option></optional>");
             }
-            out.println("</option></optional>");
-        }
 
-        spool(reader, out, "___INSERT_OPTIONS___");
-        for (Option o : options) {
-            out.print("<varlistentry><term><option>");
-            out.print(o.option);
-            out.print("</option></term><listitem><para>");
-            out.print(o.description);
-            out.println("</para></listitem></varlistentry>");
-        }
+            spool(reader, out, "___INSERT_OPTIONS___");
+            for (Option o : options) {
+                out.print("<varlistentry><term><option>");
+                out.print(o.option);
+                out.print("</option></term><listitem><para>");
+                out.print(o.description);
+                out.println("</para></listitem></varlistentry>");
+            }
 
-        spool(reader, out, "___END_OF_FILE___");
-        out.flush();
-        IOUtils.close(reader);
+            spool(reader, out, "___END_OF_FILE___");
+            out.flush();
+        }
 
         return wrt.toString();
     }

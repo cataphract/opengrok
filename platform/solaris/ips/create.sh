@@ -79,8 +79,9 @@ PKGSEND add file doc/ctags.config mode=0444 owner=root group=sys path=/usr/openg
 
 
 # install libs
+LV=4.1.0
 for file in ant.jar bcel-5.2.jar \
-            lucene-core-3.6.1.jar lucene-spellchecker-3.6.1.jar \
+            lucene-analyzers-common-${LV}.jar lucene-core-${LV}.jar lucene-queryparser-${LV}.jar lucene-suggest-${LV}.jar \ 
             jrcs.jar \
             swing-layout-0.9.jar
 do

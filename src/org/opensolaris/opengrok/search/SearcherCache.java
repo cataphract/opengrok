@@ -114,8 +114,6 @@ public class SearcherCache {
 
         @Override
         public void close() throws IOException {
-            IOUtils.close(searcher);
-
             for (int i = 0; i < sms.size(); i++) {
                 try {
                     sms.get(i).release(searchers.get(i));

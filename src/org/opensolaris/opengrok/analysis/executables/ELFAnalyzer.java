@@ -18,7 +18,7 @@
  */
 
 /*
- * Copyright (c) 2005, 2012, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2005, 2013, Oracle and/or its affiliates. All rights reserved.
  */
 package org.opensolaris.opengrok.analysis.executables;
 
@@ -26,7 +26,6 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Reader;
-import java.io.StringReader;
 import java.io.Writer;
 import java.nio.ByteOrder;
 import java.nio.MappedByteBuffer;
@@ -35,14 +34,14 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.logging.Level;
-import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.document.TextField;
 import org.opensolaris.opengrok.OpenGrokLogger;
+import org.opensolaris.opengrok.analysis.AnalyzerGuru;
 import org.opensolaris.opengrok.analysis.FileAnalyzer;
 import org.opensolaris.opengrok.analysis.FileAnalyzerFactory;
 import org.opensolaris.opengrok.analysis.plain.PlainFullTokenizer;
-import org.opensolaris.opengrok.util.IOUtils;
 import org.opensolaris.opengrok.web.Util;
 
 /**
@@ -54,8 +53,7 @@ import org.opensolaris.opengrok.web.Util;
  */
 public class ELFAnalyzer extends FileAnalyzer {
 
-    private StringBuilder content;
-    private PlainFullTokenizer plainfull;
+    private StringBuilder content;    
 
     private static final List<String> READABLE_SECTIONS;
     static {
@@ -74,8 +72,7 @@ public class ELFAnalyzer extends FileAnalyzer {
      */
     protected ELFAnalyzer(FileAnalyzerFactory factory) {
         super(factory);
-        content = new StringBuilder();
-        plainfull = new PlainFullTokenizer(new StringReader(""));
+        content = new StringBuilder();        
     }
 
     @Override
@@ -83,18 +80,15 @@ public class ELFAnalyzer extends FileAnalyzer {
         if (in instanceof FileInputStream) {
             parseELF((FileInputStream) in);
             if (content.length() > 0) {
-                doc.add(new Field("full", " ", Field.Store.YES, Field.Index.ANALYZED));
+                doc.add(new Field("full", AnalyzerGuru.dummyS, TextField.TYPE_STORED));
             }
         } else {
             String fullpath = doc.get("fullpath");
-            final FileInputStream fin = new FileInputStream(fullpath);
-            try {
+            try (FileInputStream fin = new FileInputStream(fullpath)) {
                 parseELF(fin);
                 if (content.length() > 0) {
-                    doc.add(new Field("full", " ", Field.Store.YES, Field.Index.ANALYZED));
+                    doc.add(new Field("full", AnalyzerGuru.dummyS, TextField.TYPE_STORED));
                 }
-            } finally {
-                IOUtils.close(fin);
             }
         }
     }
@@ -181,14 +175,20 @@ public class ELFAnalyzer extends FileAnalyzer {
     }
 
     @Override
-    public TokenStream overridableTokenStream(String fieldName, Reader reader) {
+    public TokenStreamComponents createComponents(String fieldName, Reader reader) {
         if ("full".equals(fieldName)) {
-            char[] cs = new char[content.length()];
-            content.getChars(0, cs.length, cs, 0);
-            plainfull.reInit(cs, cs.length);
-            return plainfull;
+            final PlainFullTokenizer plainfull = new PlainFullTokenizer(reader);
+            plainfull.reInit(content.toString());
+            TokenStreamComponents tc = new TokenStreamComponents(plainfull) {
+            @Override
+            protected void setReader(final Reader reader) throws IOException {                
+                plainfull.reInit(content.toString());
+                super.setReader(reader);
+            }
+        };
+            return tc;
         }
-        return super.overridableTokenStream(fieldName, reader);
+        return super.createComponents(fieldName, reader);
     }
 
     /**

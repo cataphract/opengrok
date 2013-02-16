@@ -18,7 +18,7 @@
  */
 
 /*
- * Copyright (c) 2005, 2012, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2005, 2013, Oracle and/or its affiliates. All rights reserved.
  * Use is subject to license terms.
  */
 package org.opensolaris.opengrok.analysis;
@@ -35,12 +35,10 @@ import java.io.Writer;
 import java.util.logging.Level;
 import java.util.zip.GZIPOutputStream;
 import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.document.Document;
 import org.opensolaris.opengrok.OpenGrokLogger;
 import org.opensolaris.opengrok.configuration.Project;
 import org.opensolaris.opengrok.configuration.RuntimeEnvironment;
-import org.opensolaris.opengrok.util.IOUtils;
 
 /**
  * Base class for all different File Analyzers
@@ -84,7 +82,7 @@ public class FileAnalyzer extends Analyzer {
         }
 
         /**
-         * Get the type name value used to tag lucence documents.
+         * Get the type name value used to tag lucene documents.
          * @return a none-null string.
          */
         public String typeName() {
@@ -129,39 +127,37 @@ public class FileAnalyzer extends Analyzer {
 
     public Genre getGenre() {
         return factory.getGenre();
-    }
-    private final HistoryAnalyzer hista;
+    }    
 
     /** Creates a new instance of FileAnalyzer */
     public FileAnalyzer(FileAnalyzerFactory factory) {
-        this.factory = factory;
-        hista = new HistoryAnalyzer();
+        super(new Analyzer.PerFieldReuseStrategy());
+        this.factory = factory;        
+                        
     }
 
     public void analyze(Document doc, InputStream in) throws IOException {
         // not used
     }
         
-    public TokenStream overridableTokenStream(String fieldName, Reader reader) {
-        if ("path".equals(fieldName) || "project".equals(fieldName)) {
-            return new PathTokenizer(reader);
-        } else if ("hist".equals(fieldName)) {
-            return hista.tokenStream(fieldName, reader);
-        }
-        OpenGrokLogger.getLogger().log(Level.WARNING, "Have no analyzer for: {0}", fieldName);
-        return null;
-    }
-
     @Override
-    public final TokenStream tokenStream(String fieldName, Reader reader) {
-        return this.overridableTokenStream(fieldName, reader);
-    }        
+    public TokenStreamComponents createComponents(String fieldName, Reader reader) {                        
+        if ("path".equals(fieldName)) {
+            PathTokenizer pathtokenizer = new PathTokenizer(reader);
+            TokenStreamComponents tsc_path = new TokenStreamComponents(pathtokenizer);
+            return tsc_path;
+        } else if ("project".equals(fieldName)) {
+            PathTokenizer projecttokenizer = new PathTokenizer(reader);
+            TokenStreamComponents tsc_project = new TokenStreamComponents(projecttokenizer);
+            return tsc_project;
+        } else if ("hist".equals(fieldName)) {                        
+                return new HistoryAnalyzer().createComponents(fieldName, reader);            
+        }
         
-    @Override    
-    public final TokenStream reusableTokenStream(String fieldName, Reader reader) {
-        //TODO needs refactoring to get more speed and less ram usage for indexer
-        return this.tokenStream(fieldName, reader);
-    }           
+        OpenGrokLogger.getLogger().log(Level.WARNING, "Have no analyzer for: {0}", fieldName);        
+        return null;
+               
+    }
 
     /**
      * Write a cross referenced HTML file.
@@ -177,16 +173,11 @@ public class FileAnalyzer extends Analyzer {
 
         final boolean compressed = env.isCompressXref();
         final File file = new File(xrefDir, path + (compressed ? ".gz" : ""));
-        OutputStream out = new FileOutputStream(file);
-        try {
-            if (compressed) {
-                out = new GZIPOutputStream(out);
-            }
-            Writer w = new BufferedWriter(new OutputStreamWriter(out));
+        try (OutputStream out = compressed ?
+                    new GZIPOutputStream(new FileOutputStream(file)) :
+                    new FileOutputStream(file);
+                Writer w = new BufferedWriter(new OutputStreamWriter(out))) {
             writeXref(w);
-            IOUtils.close(w);
-        } finally {
-            IOUtils.close(out);
         }
     }
 }

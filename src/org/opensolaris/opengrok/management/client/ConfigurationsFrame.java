@@ -18,7 +18,7 @@
  */
 
 /*
- * Copyright (c) 2008, 2010, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2008, 2012, Oracle and/or its affiliates. All rights reserved.
  */
 
 package org.opensolaris.opengrok.management.client;
@@ -158,6 +158,7 @@ public class ConfigurationsFrame extends javax.swing.JFrame {
         this.compressXRefsCB.setSelected(config.isCompressXref());
         this.cTagsField.setText(config.getCtags());
         this.generateHtmlCB.setSelected(config.isGenerateHtml());
+        this.tagsEnabledCB.setSelected(config.isTagsEnabled());
         this.historyCacheCB.setSelected(config.isHistoryCache());
         this.indexWordLimitField.setText(Integer.toString(config.getIndexWordLimit()));
         this.allowLeadingWildCardsCB.setSelected(config.isAllowLeadingWildcard());
@@ -226,9 +227,9 @@ public class ConfigurationsFrame extends javax.swing.JFrame {
         genSettingsPanel = new javax.swing.JPanel();
         jLabel1 = new javax.swing.JLabel();
         jLabel2 = new javax.swing.JLabel();
-        consoleLevelCombo = new javax.swing.JComboBox();
+        consoleLevelCombo = new javax.swing.JComboBox<Level>();
         jLabel3 = new javax.swing.JLabel();
-        fileLevelCombo = new javax.swing.JComboBox();
+        fileLevelCombo = new javax.swing.JComboBox<Level>();
         jLabel4 = new javax.swing.JLabel();
         logFilePathField = new javax.swing.JTextField();
         jLabel5 = new javax.swing.JLabel();
@@ -255,6 +256,7 @@ public class ConfigurationsFrame extends javax.swing.JFrame {
         compressXRefsCB = new javax.swing.JCheckBox();
         jLabel18 = new javax.swing.JLabel();
         indexWordLimitField = new javax.swing.JTextField();
+        tagsEnabledCB = new javax.swing.JCheckBox();
         projectsPanel = new javax.swing.JPanel();
         jScrollPane1 = new javax.swing.JScrollPane();
         projectsTable = new javax.swing.JTable();
@@ -287,7 +289,7 @@ public class ConfigurationsFrame extends javax.swing.JFrame {
         setTitle("OpenGrok Configuration"); // NOI18N
         setName("configFrame"); // NOI18N
 
-        jLabel1.setFont(new java.awt.Font("DejaVu Sans", 1, 13));
+        jLabel1.setFont(new java.awt.Font("DejaVu Sans", 1, 13)); // NOI18N
         jLabel1.setText("Logging:"); // NOI18N
 
         jLabel2.setText("Console Level"); // NOI18N
@@ -302,14 +304,14 @@ public class ConfigurationsFrame extends javax.swing.JFrame {
 
         logFilePathField.setText("jTextField1"); // NOI18N
 
-        jLabel5.setFont(new java.awt.Font("DejaVu Sans", 1, 13));
+        jLabel5.setFont(new java.awt.Font("DejaVu Sans", 1, 13)); // NOI18N
         jLabel5.setText("Publishing:"); // NOI18N
 
         jLabel6.setText("Host URL"); // NOI18N
 
         publishHostField.setText("jTextField2"); // NOI18N
 
-        jLabel19.setFont(new java.awt.Font("DejaVu Sans", 1, 13));
+        jLabel19.setFont(new java.awt.Font("DejaVu Sans", 1, 13)); // NOI18N
         jLabel19.setText("Configuration");
 
         jLabel20.setText("Configuration file: ");
@@ -345,7 +347,7 @@ public class ConfigurationsFrame extends javax.swing.JFrame {
                     .addGroup(genSettingsPanelLayout.createSequentialGroup()
                         .addComponent(jLabel20)
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                        .addComponent(configFileField, javax.swing.GroupLayout.DEFAULT_SIZE, 390, Short.MAX_VALUE)))
+                        .addComponent(configFileField, javax.swing.GroupLayout.DEFAULT_SIZE, 366, Short.MAX_VALUE)))
                 .addContainerGap())
         );
         genSettingsPanelLayout.setVerticalGroup(
@@ -375,7 +377,7 @@ public class ConfigurationsFrame extends javax.swing.JFrame {
                 .addGroup(genSettingsPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(jLabel20)
                     .addComponent(configFileField, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
-                .addContainerGap(110, Short.MAX_VALUE))
+                .addContainerGap(121, Short.MAX_VALUE))
         );
 
         jTabPane.addTab("General", genSettingsPanel);
@@ -414,6 +416,8 @@ public class ConfigurationsFrame extends javax.swing.JFrame {
 
         indexWordLimitField.setText("jTextField1"); // NOI18N
 
+        tagsEnabledCB.setText("Assign Tags in History"); // NOI18N
+
         javax.swing.GroupLayout indexerPanelLayout = new javax.swing.GroupLayout(indexerPanel);
         indexerPanel.setLayout(indexerPanelLayout);
         indexerPanelLayout.setHorizontalGroup(
@@ -434,7 +438,7 @@ public class ConfigurationsFrame extends javax.swing.JFrame {
                             .addGroup(javax.swing.GroupLayout.Alignment.LEADING, indexerPanelLayout.createSequentialGroup()
                                 .addComponent(jLabel18)
                                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(indexWordLimitField, 0, 0, Short.MAX_VALUE))
+                                .addComponent(indexWordLimitField, 0, 1, Short.MAX_VALUE))
                             .addComponent(remoteSCMSupportedCB, javax.swing.GroupLayout.Alignment.LEADING)
                             .addComponent(luceneLockingCB, javax.swing.GroupLayout.Alignment.LEADING)
                             .addComponent(historyCacheCB, javax.swing.GroupLayout.Alignment.LEADING)
@@ -445,9 +449,14 @@ public class ConfigurationsFrame extends javax.swing.JFrame {
                             .addGroup(indexerPanelLayout.createSequentialGroup()
                                 .addComponent(jLabel17)
                                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(historyReaderTimelimitField, javax.swing.GroupLayout.DEFAULT_SIZE, 159, Short.MAX_VALUE))
+                                .addComponent(historyReaderTimelimitField, javax.swing.GroupLayout.DEFAULT_SIZE, 113, Short.MAX_VALUE))
                             .addComponent(optimizedDatabaseCB)
                             .addComponent(indexVersionedFilesOnlyCB)))
+                    .addGroup(indexerPanelLayout.createSequentialGroup()
+                        .addComponent(jLabel18)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addComponent(indexWordLimitField, 0, 1, Short.MAX_VALUE)
+                        .addGap(325, 325, 325))
                     .addGroup(indexerPanelLayout.createSequentialGroup()
                         .addComponent(jLabel16)
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
@@ -490,7 +499,7 @@ public class ConfigurationsFrame extends javax.swing.JFrame {
                 .addGroup(indexerPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(jLabel16)
                     .addComponent(cTagsField, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
-                .addContainerGap(79, Short.MAX_VALUE))
+                .addContainerGap(117, Short.MAX_VALUE))
         );
 
         jTabPane.addTab("Indexer", indexerPanel);
@@ -514,13 +523,13 @@ public class ConfigurationsFrame extends javax.swing.JFrame {
             projectsPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(projectsPanelLayout.createSequentialGroup()
                 .addContainerGap()
-                .addComponent(jScrollPane1, javax.swing.GroupLayout.DEFAULT_SIZE, 507, Short.MAX_VALUE)
+                .addComponent(jScrollPane1, javax.swing.GroupLayout.DEFAULT_SIZE, 510, Short.MAX_VALUE)
                 .addContainerGap())
         );
         projectsPanelLayout.setVerticalGroup(
             projectsPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(projectsPanelLayout.createSequentialGroup()
-                .addComponent(jScrollPane1, javax.swing.GroupLayout.DEFAULT_SIZE, 309, Short.MAX_VALUE)
+                .addComponent(jScrollPane1, javax.swing.GroupLayout.DEFAULT_SIZE, 301, Short.MAX_VALUE)
                 .addContainerGap())
         );
 
@@ -545,14 +554,14 @@ public class ConfigurationsFrame extends javax.swing.JFrame {
             repositoryPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(repositoryPanelLayout.createSequentialGroup()
                 .addContainerGap()
-                .addComponent(jScrollPane2, javax.swing.GroupLayout.DEFAULT_SIZE, 507, Short.MAX_VALUE)
+                .addComponent(jScrollPane2, javax.swing.GroupLayout.DEFAULT_SIZE, 510, Short.MAX_VALUE)
                 .addContainerGap())
         );
         repositoryPanelLayout.setVerticalGroup(
             repositoryPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(repositoryPanelLayout.createSequentialGroup()
                 .addContainerGap()
-                .addComponent(jScrollPane2, javax.swing.GroupLayout.DEFAULT_SIZE, 297, Short.MAX_VALUE)
+                .addComponent(jScrollPane2, javax.swing.GroupLayout.DEFAULT_SIZE, 289, Short.MAX_VALUE)
                 .addContainerGap())
         );
 
@@ -609,7 +618,7 @@ public class ConfigurationsFrame extends javax.swing.JFrame {
                             .addComponent(jLabel13))
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                         .addGroup(historyListingPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                            .addComponent(userPageField, javax.swing.GroupLayout.DEFAULT_SIZE, 410, Short.MAX_VALUE)
+                            .addComponent(userPageField, javax.swing.GroupLayout.DEFAULT_SIZE, 390, Short.MAX_VALUE)
                             .addComponent(urlPrefixField, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.DEFAULT_SIZE, 410, Short.MAX_VALUE)
                             .addComponent(bugPageField, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.DEFAULT_SIZE, 410, Short.MAX_VALUE)
                             .addComponent(bugPatternField, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.DEFAULT_SIZE, 410, Short.MAX_VALUE)
@@ -654,7 +663,7 @@ public class ConfigurationsFrame extends javax.swing.JFrame {
                 .addGroup(historyListingPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(jLabel14)
                     .addComponent(webAppLAFField, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
-                .addContainerGap(71, Short.MAX_VALUE))
+                .addContainerGap(111, Short.MAX_VALUE))
         );
 
         jTabPane.addTab("Web App", historyListingPanel);
@@ -678,14 +687,14 @@ public class ConfigurationsFrame extends javax.swing.JFrame {
             jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(jPanel1Layout.createSequentialGroup()
                 .addContainerGap()
-                .addComponent(jScrollPane3, javax.swing.GroupLayout.DEFAULT_SIZE, 507, Short.MAX_VALUE)
+                .addComponent(jScrollPane3, javax.swing.GroupLayout.DEFAULT_SIZE, 510, Short.MAX_VALUE)
                 .addContainerGap())
         );
         jPanel1Layout.setVerticalGroup(
             jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(jPanel1Layout.createSequentialGroup()
                 .addContainerGap()
-                .addComponent(jScrollPane3, javax.swing.GroupLayout.DEFAULT_SIZE, 297, Short.MAX_VALUE)
+                .addComponent(jScrollPane3, javax.swing.GroupLayout.DEFAULT_SIZE, 289, Short.MAX_VALUE)
                 .addContainerGap())
         );
 
@@ -825,6 +834,7 @@ public class ConfigurationsFrame extends javax.swing.JFrame {
        config.setCompressXref(this.compressXRefsCB.isSelected());
        config.setCtags(this.cTagsField.getText());
        config.setGenerateHtml(this.generateHtmlCB.isSelected());
+       config.setTagsEnabled(this.tagsEnabledCB.isSelected());
        config.setHistoryCache(this.historyCacheCB.isSelected());
        config.setHistoryCacheTime(Integer.parseInt(this.historyReaderTimelimitField.getText()));
        config.setIndexWordLimit(Integer.parseInt(this.indexWordLimitField.getText()));
@@ -869,9 +879,9 @@ public class ConfigurationsFrame extends javax.swing.JFrame {
     private javax.swing.JButton closeBtn;
     private javax.swing.JCheckBox compressXRefsCB;
     private javax.swing.JTextField configFileField;
-    private javax.swing.JComboBox consoleLevelCombo;
+    private javax.swing.JComboBox<Level> consoleLevelCombo;
     private javax.swing.JTextField dataRootField;
-    private javax.swing.JComboBox fileLevelCombo;
+    private javax.swing.JComboBox<Level> fileLevelCombo;
     private javax.swing.JPanel genSettingsPanel;
     private javax.swing.JCheckBox generateHtmlCB;
     private javax.swing.JCheckBox historyCacheCB;
@@ -918,6 +928,7 @@ public class ConfigurationsFrame extends javax.swing.JFrame {
     private javax.swing.JTextField reviewPageField;
     private javax.swing.JTextField reviewPatternField;
     private javax.swing.JTextField sourceRootField;
+    private javax.swing.JCheckBox tagsEnabledCB;
     private javax.swing.JButton updateBtn;
     private javax.swing.JTextField urlPrefixField;
     private javax.swing.JTextField userPageField;

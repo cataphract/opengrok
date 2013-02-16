@@ -106,6 +106,7 @@ Copyright (c) 2005, 2011, Oracle and/or its affiliates. All rights reserved.
     <property name="test.cvs.repo" value="${test.cvs}/cvsrepo"/>
     <property name="test.cvs.root" value="${test.cvs}/cvsroot"/>
     <property name="test.hg" value="${test.repositories}/mercurial"/>
+    <property name="test.git" value="${test.repositories}/git"/>
     <property name="test.svn" value="${test.repositories}/svn"/>
     <property name="test.razor" value="${test.repositories}/razor"/>
 
@@ -144,10 +145,15 @@ Copyright (c) 2005, 2011, Oracle and/or its affiliates. All rights reserved.
 
     <available file="JFlex.jar" type="file" property="JFlex.present">
         <filepath refid="lib.search.path"/>
-    </available>
+    </available>    
     <fail unless="JFlex.present" message="Please download JFlex (http://jflex.de/) and put JFlex.jar it into ./lib directory (or in ant classpath)."/>
 
-    <taskdef classname="JFlex.anttask.JFlexTask" name="jflex" classpathref="lib.search.path"/>    
+    <target name="download-jflex" unless="JFlex.present">
+        <get src="http://repo1.maven.org/maven2/de/jflex/jflex/1.4.3/jflex-1.4.3.jar"
+        dest="lib/JFlex.jar" verbose="true" usetimestamp="true"/>        
+    </target>    
+
+    <taskdef classname="JFlex.anttask.JFlexTask" name="jflex" classpathref="lib.search.path" />    
     <target name="jflex">
         <mkdir dir="${src.generatedsrc.dir}"/>
         <jflex file="${src.dir}/org/opensolaris/opengrok/analysis/plain/PlainXref.lex" destdir="${src.generatedsrc.dir}"/>
@@ -189,41 +195,41 @@ Copyright (c) 2005, 2011, Oracle and/or its affiliates. All rights reserved.
         <jflex file="${src.dir}/org/opensolaris/opengrok/search/context/PlainLineTokenizer.lex" destdir="${src.generatedsrc.dir}"/>
     </target>
     
-    <property name="hg" value="hg"/>
+    <property name="git" value="git"/>
 
     <!-- Get the id of the changeset we're building from using a
          Mercurial command.
       -->
     <target name="-get-changeset-from-command"
-            depends="-check-is-hg-repo" if="build.from.repo">
-        <exec executable="${hg}"
+            depends="-check-is-git-repo" if="build.from.repo">
+        <exec executable="${git}"
               failifexecutionfails="no"
               outputproperty="changeset">
-            <arg value="identify"/>
-            <arg value="--id"/>
+            <arg value="rev-parse"/>
+            <arg value="HEAD"/>
         </exec>
     </target>
 
     <!-- Check if we build from a checked out copy of the repository,
-         so that we have history information from Mercurial available.
+         so that we have history information from git available.
       -->
-    <target name="-check-is-hg-repo">
-        <available property="build.from.repo" file=".hg" type="dir"/>
+    <target name="-check-is-git-repo">
+        <available property="build.from.repo" file=".git" type="dir"/>
     </target>
 
     <!-- Get the id of the changeset we're building from by reading
-         .hg_archival.txt file created by hg archive. This will only
+         .git_archival.txt file created by git archive. This will only
          be used when we're not building from a checked out copy of
          the repository, for example the source distribution.
       -->
     <target name="-get-changeset-from-file"
-            depends="-check-is-hg-repo" unless="build.from.repo">
-        <tempfile property="hg.archival.temp" deleteonexit="true"/>
-        <copy file=".hg_archival.txt" tofile="${hg.archival.temp}"/>
-        <replaceregexp file="${hg.archival.temp}" flags="s"
+            depends="-check-is-git-repo" unless="build.from.repo">
+        <tempfile property="git.archival.temp" deleteonexit="true"/>
+        <copy file=".git_archival.txt" tofile="${git.archival.temp}"/>
+        <replaceregexp file="${git.archival.temp}" flags="s"
                      match=".*node: ([0-9a-f]{12}).*"
                      replace="\1"/>
-        <loadfile srcFile="${hg.archival.temp}" property="changeset"/>
+        <loadfile srcFile="${git.archival.temp}" property="changeset"/>
     </target>
 
     <target name="-update-build-info"
@@ -237,7 +243,7 @@ Copyright (c) 2005, 2011, Oracle and/or its affiliates. All rights reserved.
     </target>
         
     <property name="coverage.dir" value="${basedir}/coverage"/>
-    <target name="-pre-compile" depends="jrcs,jflex,download-lucene"/>
+    <target name="-pre-compile" depends="jrcs,download-jflex,jflex,download-lucene"/>
 	<target name="eclipse" depends="-pre-compile" 
 		description="satisfy eclipse dependencies"/>
     <target name="-post-clean">
@@ -249,7 +255,9 @@ Copyright (c) 2005, 2011, Oracle and/or its affiliates. All rights reserved.
     
     <target name="clean-lib" depends="init">
         <delete file="${file.reference.lucene-core.jar}"/>
-        <delete file="${file.reference.lucene-spellchecker.jar}"/>        
+        <delete file="${file.reference.lucene-analyzers-common.jar}"/>
+        <delete file="${file.reference.lucene-queryparser.jar}"/>
+        <delete file="${file.reference.lucene-suggest.jar}"/>
     </target>
 
     <!--
@@ -311,15 +319,23 @@ Copyright (c) 2005, 2011, Oracle and/or its affiliates. All rights reserved.
     <target name="-check-lucene" description="Check that lucene jar files are present">
         <available file="${lucene-core.jar}" type="file" property="lucene-core.jar.present">
             <filepath refid="plainlib.search.path"/>
-        </available>        
-        <available file="${lucene-spellchecker.jar}" type="file" property="lucene-spellchecker.jar.present">
+        </available> 
+        <available file="${lucene-analyzers-common.jar}" type="file" property="lucene-analyzers-common.jar.present">
             <filepath refid="plainlib.search.path"/>
-        </available>        
+        </available> 
+        <available file="${lucene-queryparser.jar}" type="file" property="lucene-queryparser.jar.present">
+            <filepath refid="plainlib.search.path"/>
+        </available> 
+        <available file="${lucene-suggest.jar}" type="file" property="lucene-suggest.jar.present">
+            <filepath refid="plainlib.search.path"/>
+        </available>         
         <condition property="lucene_not_downloaded">
             <not>
             <and>
                 <isset property="lucene-core.jar.present"/>
-                <isset property="lucene-spellchecker.jar.present"/>
+                <isset property="lucene-analyzers-common.jar.present"/>
+                <isset property="lucene-queryparser.jar.present"/>
+                <isset property="lucene-suggest.jar.present"/>
              </and>
              </not>
         </condition>         
@@ -328,8 +344,12 @@ Copyright (c) 2005, 2011, Oracle and/or its affiliates. All rights reserved.
     <target name="download-lucene" depends="-check-lucene" if="lucene_not_downloaded">
         <get src="http://repo1.maven.org/maven2/org/apache/lucene/lucene-core/${lucene.version}/${lucene-core.jar}"
         dest="lib/${lucene-core.jar}" verbose="true" usetimestamp="true"/>
-        <get src="http://repo1.maven.org/maven2/org/apache/lucene/lucene-spellchecker/${lucene.version}/${lucene-spellchecker.jar}"
-        dest="lib/${lucene-spellchecker.jar}" verbose="true" usetimestamp="true"/>
+        <get src="http://repo1.maven.org/maven2/org/apache/lucene/lucene-analyzers-common/${lucene.version}/${lucene-analyzers-common.jar}"
+        dest="lib/${lucene-analyzers-common.jar}" verbose="true" usetimestamp="true"/>
+        <get src="http://repo1.maven.org/maven2/org/apache/lucene/lucene-queryparser/${lucene.version}/${lucene-queryparser.jar}"
+        dest="lib/${lucene-queryparser.jar}" verbose="true" usetimestamp="true"/>
+        <get src="http://repo1.maven.org/maven2/org/apache/lucene/lucene-suggest/${lucene.version}/${lucene-suggest.jar}"
+        dest="lib/${lucene-suggest.jar}" verbose="true" usetimestamp="true"/>
     </target>
 
     <target name="-post-jar" depends="-copy-lib-without-netbeans">
@@ -423,7 +443,8 @@ Copyright (c) 2005, 2011, Oracle and/or its affiliates. All rights reserved.
                     <include name="*.jar"/>
                 </fileset>
             </auxClasspath>
-            <sourcePath path="src" />
+            <sourcePath path="${src.dir}"/>
+            <sourcePath path="${src.generatedsrc.dir}"/>
             <class location="${dist.dir}/opengrok.jar" />
         </findbugs>
     </target>
@@ -441,7 +462,8 @@ Copyright (c) 2005, 2011, Oracle and/or its affiliates. All rights reserved.
                     <include name="*.jar"/>
                 </fileset>
             </auxClasspath>
-            <sourcePath path="src" />
+            <sourcePath path="${src.dir}"/>
+            <sourcePath path="${src.generatedsrc.dir}"/>
             <class location="${dist.dir}/opengrok.jar" />
         </findbugs>
     </target>
@@ -480,7 +502,7 @@ Copyright (c) 2005, 2011, Oracle and/or its affiliates. All rights reserved.
         <taskdef name="pmd" classname="net.sourceforge.pmd.ant.PMDTask" classpathref="pmd.lib"/>
         <mkdir dir="pmd"/>
         <pmd failuresPropertyName="pmd.num.warnings" rulesetfiles="tools/pmd_ruleset.xml">
-            <version>java 1.6</version>
+	    <sourcelanguage name="java" version="1.7" />
             <formatter type="html" toFile="pmd/pmd_report.html"/>
             <formatter type="xml" toFile="pmd/pmd_report.xml"/>
             <fileset dir="src" includes="**/*.java"/>
@@ -562,6 +584,10 @@ Copyright (c) 2005, 2011, Oracle and/or its affiliates. All rights reserved.
         <!-- Strange indentation in line two levels below to get newline correctly -->
         <concat destfile="${test.cvs.repo}/CVS/Root" append="no" force="yes" eol="unix">${basedir}/${test.cvs.root}/
         </concat>
+	<!-- Generate ZIP files used for unit testing git/.git are renamed -->
+	<copy todir="${test.git}/.git">
+		<fileset dir="${test.git}/git"/>
+	</copy>	
         <!-- Generate ZIP files used for unit testing mercurial/.hg and mercurial/.hgignore are renamed -->
         <copy todir="${test.hg}/.hg">
             <fileset dir="${test.hg}/hg"/>
@@ -574,7 +600,7 @@ Copyright (c) 2005, 2011, Oracle and/or its affiliates. All rights reserved.
               defaultexcludes="no"/>
         <zip destfile="${build.test.classes.dir}/org/opensolaris/opengrok/history/repositories.zip" 
                 basedir="${test.repositories}"
-                excludes="mercurial/hg/**, mercurial/hgignore"
+		excludes="mercurial/hg/**, mercurial/hgignore, git/git/**"
                 update="false"
                 defaultexcludes="no"/>
 
@@ -633,7 +659,8 @@ Copyright (c) 2005, 2011, Oracle and/or its affiliates. All rights reserved.
     <!-- clean up generated test repositories -->
     <target name="-delete-generated-repository-files">
         <delete dir="${test.hg}/.hg"/>
-        <delete file="${test.hg}/.hgignore"/>
+	<delete file="${test.hg}/.hgignore"/>
+	<delete dir="${test.git}/.git"/>
         <delete dir="${test.svn}"/>
         <delete dir="${test.razor}"/>
         <delete file="${test.cvs.repo}/CVS/Root"/>
@@ -776,8 +803,8 @@ Copyright (c) 2005, 2011, Oracle and/or its affiliates. All rights reserved.
 			javaencoding="UTF-8"
 			uriroot="${build.dir}/src/web"
 			package="${codebase.dot}.jsp"
-			compilersourcevm="1.6"
-			compilertargetvm="1.6"
+			compilersourcevm="1.7"
+			compilertargetvm="1.7"
 			smapsuppressed="false"
 			webxmlfragment="${build.dir}/src/servlets_web.xml"
 			/>
@@ -800,7 +827,7 @@ Copyright (c) 2005, 2011, Oracle and/or its affiliates. All rights reserved.
 			deprecation="${deprecation}" classpathref="classpath.jsp"
 			encoding="UTF-8" listfiles="${listfiles}"
 			includeantruntime="false">
-            <compilerarg value="-Xlint:unchecked" compiler="javac1.6"/>
+            <compilerarg value="-Xlint:unchecked" compiler="javac1.7"/>
         </javac>
     </target>
 

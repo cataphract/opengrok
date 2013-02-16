@@ -32,12 +32,12 @@ import java.util.ArrayList;
 import java.util.List;
 import org.junit.After;
 import org.junit.AfterClass;
+import static org.junit.Assert.*;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.opensolaris.opengrok.analysis.plain.PlainXref;
 import org.opensolaris.opengrok.history.RepositoryInfo;
-import static org.junit.Assert.*;
 
 /**
  * Test the RuntimeEnvironment class
@@ -45,7 +45,7 @@ import static org.junit.Assert.*;
  * @author Trond Norbye
  */
 public class RuntimeEnvironmentTest {
-    private static File orgiginalConfig;
+    private static File originalConfig;
 
     public RuntimeEnvironmentTest() {
     }
@@ -53,28 +53,27 @@ public class RuntimeEnvironmentTest {
     @BeforeClass
     public static void setUpClass() throws Exception {
         // preserve the original
-        orgiginalConfig = File.createTempFile("config", ".xml");
-        RuntimeEnvironment.getInstance().writeConfiguration(orgiginalConfig);
-
-        // Create a default configuration
-        Configuration config = new Configuration();
-        RuntimeEnvironment.getInstance().setConfiguration(config);
+        originalConfig = File.createTempFile("config", ".xml");
+        RuntimeEnvironment.getInstance().writeConfiguration(originalConfig);       
     }
 
     @AfterClass
     public static void tearDownClass() throws Exception {
         // restore the configuration
-        RuntimeEnvironment.getInstance().readConfiguration(orgiginalConfig);
+        RuntimeEnvironment.getInstance().readConfiguration(originalConfig);
         RuntimeEnvironment.getInstance().register();
-        orgiginalConfig.delete();
+        originalConfig.delete();
     }
 
     @Before
-    public void setUp() {
+    public void setUp() throws IOException {
+        // Create a default configuration
+        Configuration config = new Configuration();
+        RuntimeEnvironment.getInstance().setConfiguration(config);
     }
 
     @After
-    public void tearDown() {
+    public void tearDown() throws IOException {
     }
 
     @Test

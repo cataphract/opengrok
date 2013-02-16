@@ -18,7 +18,7 @@
  */
 
 /*
- * Copyright (c) 2008, 2012, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2008, 2013, Oracle and/or its affiliates. All rights reserved.
  */
 
 package org.opensolaris.opengrok.history;
@@ -52,7 +52,6 @@ import org.opensolaris.opengrok.jdbc.ConnectionManager;
 import org.opensolaris.opengrok.jdbc.ConnectionResource;
 import org.opensolaris.opengrok.jdbc.InsertQuery;
 import org.opensolaris.opengrok.jdbc.PreparedQuery;
-import org.opensolaris.opengrok.util.IOUtils;
 
 class JDBCHistoryCache implements HistoryCache {
 
@@ -61,7 +60,7 @@ class JDBCHistoryCache implements HistoryCache {
 
     /** The names of all the tables created by this class. */
     private static final String[] TABLES = {
-        "REPOSITORIES", "FILES", "AUTHORS", "CHANGESETS", "FILECHANGES",
+        "REPOSITORIES", "FILES", "AUTHORS", "TAGS", "CHANGESETS", "FILECHANGES",
         "DIRECTORIES", "DIRCHANGES"
     };
 
@@ -94,6 +93,9 @@ class JDBCHistoryCache implements HistoryCache {
     /** The id to be used for the next row inserted into AUTHORS. */
     private final AtomicInteger nextAuthorId = new AtomicInteger();
 
+    /** The id to be used for the next row inserted into TAGS. */
+    private final AtomicInteger nextTagId = new AtomicInteger();
+
     /** Info string to return from {@link #getInfo()}. */
     private String info;
 
@@ -101,15 +103,12 @@ class JDBCHistoryCache implements HistoryCache {
     private static final Properties QUERIES = new Properties();
     static {
         Class<?> klazz = JDBCHistoryCache.class;
-        InputStream in = null;
-        try {
-            in = klazz.getResourceAsStream(klazz.getSimpleName() + "_queries.properties");
+        try (InputStream in = klazz.getResourceAsStream(
+                klazz.getSimpleName() + "_queries.properties")) {
             if ( in != null ) {
             QUERIES.load(in); }
         } catch (IOException ioe) {
             throw new ExceptionInInitializerError(ioe);
-        } finally { //NOPMD
-            IOUtils.close(in);
         }
     }
 
@@ -213,6 +212,10 @@ class JDBCHistoryCache implements HistoryCache {
             s.execute(getQuery("createTableAuthors"));
         }
 
+        if (!tableExists(dmd, SCHEMA, "TAGS")) {
+            s.execute(getQuery("createTableTags"));
+        }
+
         if (!tableExists(dmd, SCHEMA, "CHANGESETS")) {
             s.execute(getQuery("createTableChangesets"));
             // Create a composite index on the repository in ascending order
@@ -239,6 +242,7 @@ class JDBCHistoryCache implements HistoryCache {
         initIdGenerator(s, "getMaxDirId", nextDirId);
         initIdGenerator(s, "getMaxChangesetId", nextChangesetId);
         initIdGenerator(s, "getMaxAuthorId", nextAuthorId);
+        initIdGenerator(s, "getMaxTagId", nextTagId);
 
         StringBuilder infoBuilder = new StringBuilder();
         infoBuilder.append(getClass().getSimpleName() + "\n");
@@ -258,45 +262,32 @@ class JDBCHistoryCache implements HistoryCache {
      */
     private static void fillDirectoriesParentColumn(Statement s)
             throws SQLException {
-        PreparedStatement update = s.getConnection().prepareStatement(
-                getQuery("updateDirectoriesParent"));
-        try {
-            ResultSet rs = s.executeQuery(getQuery("getAllDirectories"));
-            try {
-                while (rs.next()) {
-                    update.setInt(1, rs.getInt("REPOSITORY"));
-                    update.setString(2, getParentPath(rs.getString("PATH")));
-                    update.setInt(3, rs.getInt("ID"));
-                    update.executeUpdate();
-                }
-            } finally {
-                rs.close();
+        try (PreparedStatement update = s.getConnection().prepareStatement(
+                     getQuery("updateDirectoriesParent"));
+                ResultSet rs = s.executeQuery(getQuery("getAllDirectories"))) {
+            while (rs.next()) {
+                update.setInt(1, rs.getInt("REPOSITORY"));
+                update.setString(2, getParentPath(rs.getString("PATH")));
+                update.setInt(3, rs.getInt("ID"));
+                update.executeUpdate();
             }
-        } finally {
-            update.close();
         }
     }
 
     private static boolean tableExists(
             DatabaseMetaData dmd, String schema, String table)
             throws SQLException {
-        ResultSet rs = dmd.getTables(
-                null, schema, table, new String[] {"TABLE"});
-        try {
+        try (ResultSet rs = dmd.getTables(
+                     null, schema, table, new String[] {"TABLE"})) {
             return rs.next();
-        } finally {
-            rs.close();
         }
     }
 
     private static boolean columnExists(
             DatabaseMetaData dmd, String schema, String table, String column)
             throws SQLException {
-        ResultSet rs = dmd.getColumns(null, schema, table, column);
-        try {
+        try (ResultSet rs = dmd.getColumns(null, schema, table, column)) {
             return rs.next();
-        } finally {
-            rs.close();
         }
     }
 
@@ -314,16 +305,13 @@ class JDBCHistoryCache implements HistoryCache {
     private static void initIdGenerator(
             Statement s, String stmtKey, AtomicInteger generator)
             throws SQLException {
-        ResultSet rs = s.executeQuery(getQuery(stmtKey));
-        try {
+        try (ResultSet rs = s.executeQuery(getQuery(stmtKey))) {
             if (rs.next()) {
                 int val = rs.getInt(1);
                 if (!rs.wasNull()) {
                     generator.set(val + 1);
                 }
             }
-        } finally {
-            rs.close();
         }
     }
 
@@ -336,11 +324,8 @@ class JDBCHistoryCache implements HistoryCache {
                 final ConnectionResource conn =
                         connectionManager.getConnectionResource();
                 try {
-                    final Statement stmt = conn.createStatement();
-                    try {
+                    try (Statement stmt = conn.createStatement()) {
                         initDB(stmt);
-                    } finally {
-                        stmt.close();
                     }
                     conn.commit();
                     // Success! Break out of the loop.
@@ -374,11 +359,8 @@ class JDBCHistoryCache implements HistoryCache {
                     PreparedStatement ps = conn.getStatement(IS_DIR_IN_CACHE);
                     ps.setString(1, toUnixPath(repository.getDirectoryName()));
                     ps.setString(2, getSourceRootRelativePath(file));
-                    ResultSet rs = ps.executeQuery();
-                    try {
+                    try (ResultSet rs = ps.executeQuery()) {
                         return rs.next();
-                    } finally {
-                        rs.close();
                     }
                 } catch (SQLException sqle) {
                     handleSQLException(sqle, i);
@@ -570,37 +552,30 @@ class JDBCHistoryCache implements HistoryCache {
             final PreparedStatement filePS =
                     withFiles ? conn.getStatement(GET_CS_FILES) : null;
 
-            ResultSet rs = ps.executeQuery();
-            try {
+            try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     // Get the information about a changeset
                     String revision = rs.getString(1);
                     String author = rs.getString(2);
-                    Timestamp time = rs.getTimestamp(3);
-                    String message = rs.getString(4);
+                    String tags = rs.getString(3);
+                    Timestamp time = rs.getTimestamp(4);
+                    String message = rs.getString(5);
                     HistoryEntry entry = new HistoryEntry(
-                                revision, time, author, message, true);
+                                revision, time, author, tags, message, true);
                     entries.add(entry);
 
                     // Fill the list of files touched by the changeset, if
                     // requested.
                     if (withFiles) {
-                        int changeset = rs.getInt(5);
+                        int changeset = rs.getInt(6);
                         filePS.setInt(1, changeset);
-
-                        // We do check next(), but PMD doesn't understand it.
-                        ResultSet fileRS = filePS.executeQuery(); // NOPMD
-                        try {
+                        try (ResultSet fileRS = filePS.executeQuery()) {
                             while (fileRS.next()) {
                                 entry.addFile(fileRS.getString(1));
                             }
-                        } finally {
-                            fileRS.close();
                         }
                     }
                 }
-            } finally {
-                rs.close();
             }
         } finally {
             connectionManager.releaseConnection(conn);
@@ -647,6 +622,7 @@ class JDBCHistoryCache implements HistoryCache {
 
         Integer reposId = null;
         Map<String, Integer> authors = null;
+        Map<String, Integer> tags = null;
         Map<String, Integer> files = null;
         Map<String, Integer> directories = null;
         PreparedStatement addChangeset = null;
@@ -662,6 +638,11 @@ class JDBCHistoryCache implements HistoryCache {
 
                 if (authors == null) {
                     authors = getAuthors(conn, history, reposId);
+                    conn.commit();
+                }
+                
+                if (tags == null) {
+                    tags = getTags(conn, history, reposId);
                     conn.commit();
                 }
 
@@ -713,7 +694,12 @@ class JDBCHistoryCache implements HistoryCache {
                 try {
                     addChangeset.setString(2, entry.getRevision());
                     addChangeset.setInt(3, authors.get(entry.getAuthor()));
-                    addChangeset.setTimestamp(4,
+                    if (entry.getTags() != null) {
+                        addChangeset.setInt(4, tags.get(entry.getTags()));
+                    } else {
+                        addChangeset.setNull(4, java.sql.Types.INTEGER);
+                    }
+                    addChangeset.setTimestamp(5,
                             new Timestamp(entry.getDate().getTime()));
                     String msg = entry.getMessage();
                     // Truncate the message if it can't fit in a VARCHAR
@@ -721,9 +707,9 @@ class JDBCHistoryCache implements HistoryCache {
                     if (msg.length() > MAX_MESSAGE_LENGTH) {
                         msg = truncate(msg, MAX_MESSAGE_LENGTH);
                     }
-                    addChangeset.setString(5, msg);
+                    addChangeset.setString(6, msg);
                     int changesetId = nextChangesetId.getAndIncrement();
-                    addChangeset.setInt(6, changesetId);
+                    addChangeset.setInt(7, changesetId);
                     addChangeset.executeUpdate();
 
                     // Add one row for each file in FILECHANGES, and one row
@@ -816,9 +802,8 @@ class JDBCHistoryCache implements HistoryCache {
             throws SQLException {
         DatabaseMetaData dmd = conn.getMetaData();
         if (procedureExists(dmd, "SYSCS_UTIL", "SYSCS_UPDATE_STATISTICS")) {
-            PreparedStatement ps = conn.prepareStatement(
-                    "CALL SYSCS_UTIL.SYSCS_UPDATE_STATISTICS(?, ?, NULL)");
-            try {
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "CALL SYSCS_UTIL.SYSCS_UPDATE_STATISTICS(?, ?, NULL)")) {
                 ps.setString(1, SCHEMA);
                 for (String table : TABLES) {
                     ps.setString(2, table);
@@ -836,8 +821,6 @@ class JDBCHistoryCache implements HistoryCache {
                     }
                     conn.commit();
                 }
-            } finally {
-                ps.close();
             }
         }
     }
@@ -850,11 +833,8 @@ class JDBCHistoryCache implements HistoryCache {
             throws SQLException {
         DatabaseMetaData dmd = conn.getMetaData();
         if (procedureExists(dmd, "SYSCS_UTIL", "SYSCS_CHECKPOINT_DATABASE")) {
-            Statement s = conn.createStatement();
-            try {
+            try (Statement s = conn.createStatement()) {
                 s.execute("CALL SYSCS_UTIL.SYSCS_CHECKPOINT_DATABASE()");
-            } finally {
-                s.close();
             }
             conn.commit();
         }
@@ -872,12 +852,9 @@ class JDBCHistoryCache implements HistoryCache {
     private boolean procedureExists(DatabaseMetaData dmd,
                                     String schema, String proc)
             throws SQLException {
-        ResultSet rs = dmd.getProcedures(null, schema, proc);
-        try {
+        try (ResultSet rs = dmd.getProcedures(null, schema, proc)) {
             // If there's a row, there is such a procedure.
             return rs.next();
-        } finally {
-            rs.close();
         }
     }
 
@@ -894,13 +871,10 @@ class JDBCHistoryCache implements HistoryCache {
         String reposPath = toUnixPath(repository.getDirectoryName());
         PreparedStatement reposIdPS = conn.getStatement(GET_REPOSITORY);
         reposIdPS.setString(1, reposPath);
-        ResultSet reposIdRS = reposIdPS.executeQuery();
-        try {
+        try (ResultSet reposIdRS = reposIdPS.executeQuery()) {
             if (reposIdRS.next()) {
                 return reposIdRS.getInt(1);
             }
-        } finally {
-            reposIdRS.close();
         }
 
         // Repository is not in the database. Add it.
@@ -917,6 +891,12 @@ class JDBCHistoryCache implements HistoryCache {
     private static final InsertQuery ADD_AUTHOR =
             new InsertQuery(getQuery("addAuthor"));
 
+    private static final PreparedQuery GET_TAGS =
+            new PreparedQuery(getQuery("getTags"));
+
+    private static final InsertQuery ADD_TAGS =
+            new InsertQuery(getQuery("addTags"));
+
     /**
      * Get a map from author names to their ids in the database. The authors
      * that are not in the database are added to it.
@@ -932,13 +912,10 @@ class JDBCHistoryCache implements HistoryCache {
         HashMap<String, Integer> map = new HashMap<String, Integer>();
         PreparedStatement ps = conn.getStatement(GET_AUTHORS);
         ps.setInt(1, reposId);
-        ResultSet rs = ps.executeQuery();
-        try {
+        try (ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
                 map.put(rs.getString(1), rs.getInt(2));
             }
-        } finally {
-            rs.close();
         }
 
         PreparedStatement insert = conn.getStatement(ADD_AUTHOR);
@@ -955,6 +932,35 @@ class JDBCHistoryCache implements HistoryCache {
             }
         }
 
+        return map;
+    }
+    
+    private Map<String, Integer> getTags(
+            ConnectionResource conn, History history, int reposId) 
+        throws SQLException {
+        HashMap<String, Integer> map = new HashMap<String, Integer>();
+        PreparedStatement ps = conn.getStatement(GET_TAGS);
+        ps.setInt(1, reposId);
+        try (ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                map.put(rs.getString(1), rs.getInt(2));
+            }
+        }
+
+        PreparedStatement insert = conn.getStatement(ADD_TAGS);
+        insert.setInt(1, reposId);
+        for (HistoryEntry entry : history.getHistoryEntries()) {
+            String tags = entry.getTags();
+            if (tags != null && !map.containsKey(tags)) {
+                int id = nextTagId.getAndIncrement();
+                insert.setString(2, tags);
+                insert.setInt(3, id);
+                insert.executeUpdate();
+                map.put(tags, id);
+                conn.commit();
+            }
+        }
+        
         return map;
     }
 
@@ -1038,13 +1044,10 @@ class JDBCHistoryCache implements HistoryCache {
             PreparedStatement ps, int reposId, Map<String, Integer> map)
             throws SQLException {
         ps.setInt(1, reposId);
-        ResultSet rs = ps.executeQuery();
-        try {
+        try (ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
                 map.put(rs.getString(1), rs.getInt(2));
             }
-        } finally {
-            rs.close();
         }
     }
 
@@ -1097,11 +1100,8 @@ class JDBCHistoryCache implements HistoryCache {
      * if there is no key
      */
     private Integer getGeneratedIntKey(Statement stmt) throws SQLException {
-        ResultSet keys = stmt.getGeneratedKeys();
-        try {
+        try (ResultSet keys = stmt.getGeneratedKeys()) {
             return keys.next() ? keys.getInt(1) : null;
-        } finally {
-            keys.close();
         }
     }
 
@@ -1134,11 +1134,8 @@ class JDBCHistoryCache implements HistoryCache {
         try {
             PreparedStatement ps = conn.getStatement(GET_LATEST_REVISION);
             ps.setString(1, toUnixPath(repository.getDirectoryName()));
-            ResultSet rs = ps.executeQuery(); // NOPMD (we do check next)
-            try {
+            try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? rs.getString(1) : null;
-            } finally {
-                rs.close();
             }
         } finally {
             connectionManager.releaseConnection(conn);
@@ -1179,13 +1176,10 @@ class JDBCHistoryCache implements HistoryCache {
             PreparedStatement ps = conn.getStatement(GET_LAST_MODIFIED_TIMES);
             ps.setString(1, toUnixPath(repository.getDirectoryName()));
             ps.setString(2, getSourceRootRelativePath(directory));
-            ResultSet rs = ps.executeQuery();
-            try {
+            try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     map.put(rs.getString(1), rs.getTimestamp(2));
                 }
-            } finally {
-                rs.close();
             }
         } finally {
             connectionManager.releaseConnection(conn);
@@ -1218,16 +1212,11 @@ class JDBCHistoryCache implements HistoryCache {
         final ConnectionResource conn =
                 connectionManager.getConnectionResource();
         try {
-            // This statement shouldn't be called very frequently, so don't
-            // care about caching it...
-            PreparedStatement ps = conn.prepareStatement(
-                    getQuery("clearRepository"));
-            try {
+            try (PreparedStatement ps = conn.prepareStatement(
+                         getQuery("clearRepository"))) {
                 ps.setInt(1, getRepositoryId(conn, repository));
                 ps.execute();
                 conn.commit();
-            } finally {
-                ps.close();
             }
         } finally {
             connectionManager.releaseConnection(conn);

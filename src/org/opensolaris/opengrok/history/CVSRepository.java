@@ -18,9 +18,8 @@
  */
 
 /*
- * Copyright (c) 2008, 2011, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2008, 2013, Oracle and/or its affiliates. All rights reserved.
  */
-
 package org.opensolaris.opengrok.history;
 
 import java.io.BufferedReader;
@@ -38,7 +37,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.opensolaris.opengrok.OpenGrokLogger;
 import org.opensolaris.opengrok.util.Executor;
-import org.opensolaris.opengrok.util.IOUtils;
 
 /**
  * Access to a local CVS repository.
@@ -118,32 +116,25 @@ public class CVSRepository extends RCSRepository {
         ensureCommand(CMD_PROPERTY_KEY, CMD_FALLBACK);
         cmd.add(this.cmd);
         cmd.add("log");
-        cmd.add("-N"); //don't display tags
 
         if (isBranch==null) {
             File tagFile = new File(getDirectoryName(), "CVS/Tag");
-            if ( tagFile.isFile() ) {
-                isBranch=Boolean.TRUE;
-                try {
-                 BufferedReader br=new BufferedReader(new FileReader(tagFile));
-                 try {
-                  String line=br.readLine();
-                  if (line!=null) {
-                         branch=line.substring(1); }
-                 } catch (Exception exp) {
+            if (tagFile.isFile()) {
+                isBranch = Boolean.TRUE;
+                try (BufferedReader br = new BufferedReader(new FileReader(tagFile))) {
+                    String line = br.readLine();
+                    if (line != null) {
+                        branch = line.substring(1);
+                    }
+                } catch (IOException ex) {
                     OpenGrokLogger.getLogger().log(Level.WARNING,
-                        "Failed to get revision tag of {0}",
-                        getDirectoryName() + ": "+exp.getClass().toString() );
-                 } finally {
-                    IOUtils.close(br);
-                   }
-                } catch (IOException ex){
-                 OpenGrokLogger.getLogger().log(Level.WARNING,
-                     "Failed to work with CVS/Tag file of {0}",
-                     getDirectoryName() + ": "+ex.getClass().toString() );
+                            "Failed to work with CVS/Tag file of {0}",
+                            getDirectoryName() + ": " + ex.getClass().toString());
+                } catch (Exception exp) {
+                    OpenGrokLogger.getLogger().log(Level.WARNING,
+                            "Failed to get revision tag of {0}",
+                            getDirectoryName() + ": " + exp.getClass().toString());
                 }
-
-
             }
             else { isBranch=Boolean.FALSE; }
         }
@@ -166,7 +157,6 @@ public class CVSRepository extends RCSRepository {
         InputStream ret = null;
 
         Process process = null;
-        InputStream in = null;
         String revision = rev;
 
         if (rev.indexOf(':') != -1) {
@@ -179,12 +169,13 @@ public class CVSRepository extends RCSRepository {
 
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             byte[] buffer = new byte[32 * 1024];
-            in = process.getInputStream();
-            int len;
+            try (InputStream in = process.getInputStream()) {
+                int len;
 
-            while ((len = in.read(buffer)) != -1) {
-                if (len > 0) {
-                    out.write(buffer, 0, len);
+                while ((len = in.read(buffer)) != -1) {
+                    if (len > 0) {
+                        out.write(buffer, 0, len);
+                    }
                 }
             }
 
@@ -193,7 +184,6 @@ public class CVSRepository extends RCSRepository {
             OpenGrokLogger.getLogger().log(Level.SEVERE,
                 "Failed to get history: {0}", exp.getClass().toString());
         } finally {
-            IOUtils.close(in);
             // Clean up zombie-processes...
             if (process != null) {
                 try {

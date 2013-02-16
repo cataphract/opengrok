@@ -18,7 +18,7 @@
  */
 
 /*
- * Copyright (c) 2007, 2012, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2007, 2013, Oracle and/or its affiliates. All rights reserved.
  */
 package org.opensolaris.opengrok.configuration;
 
@@ -44,11 +44,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.opensolaris.opengrok.history.RepositoryInfo;
 import org.opensolaris.opengrok.index.Filter;
 import org.opensolaris.opengrok.index.IgnoredNames;
-import org.opensolaris.opengrok.util.IOUtils;
 
 /**
  * Placeholder class for all configuration variables. Due to the multithreaded
@@ -72,6 +72,7 @@ public final class Configuration {
      * Should the history cache be stored in a database?
      */
     private boolean historyCacheInDB;
+
     private List<Project> projects;
     private String sourceRoot;
     private String dataRoot;
@@ -86,7 +87,10 @@ public final class Configuration {
     private Project defaultProject;
     private int indexWordLimit;
     private boolean verbose;
-    //if below is set, then we count how many files per project we need to process and print percentage of completion per project
+    /**
+     * If below is set, then we count how many files per project we need
+     * to process and print percentage of completion per project.
+     */
     private boolean printProgress;
     private boolean allowLeadingWildcard;
     private IgnoredNames ignoredNames;
@@ -103,6 +107,7 @@ public final class Configuration {
     private boolean useLuceneLocking;
     private boolean compressXref;
     private boolean indexVersionedFilesOnly;
+    private boolean tagsEnabled;
     private int hitsPerPage;
     private int cachePages;
     private String databaseDriver;
@@ -121,6 +126,10 @@ public final class Configuration {
      * Get the default tab size (number of space characters per tab character)
      * to use for each project. If {@code <= 0} tabs are read/write as is.
      *
+     *
+     *
+
+     *
      * @return current tab size set.
      * @see Project#getTabSize()
      * @see org.opensolaris.opengrok.analysis.ExpandTabsReader
@@ -132,6 +141,10 @@ public final class Configuration {
     /**
      * Set the default tab size (number of space characters per tab character)
      * to use for each project. If {@code <= 0} tabs are read/write as is.
+     *
+     *
+     *
+
      *
      * @param tabSize tabsize to set.
      * @see Project#setTabSize(int)
@@ -196,6 +209,7 @@ public final class Configuration {
         setUsingLuceneLocking(false);
         setCompressXref(true);
         setIndexVersionedFilesOnly(false);
+        setTagsEnabled(false);
         setHitsPerPage(25);
         setCachePages(5);
         setScanningDepth(3); // default depth of scanning for repositories
@@ -203,6 +217,8 @@ public final class Configuration {
         //setTabSize(4);
         setSearchPoolSize(-1); //auto
         cmds = new HashMap<String, String>();
+        setSourceRoot(null);
+        setDataRoot(null);
     }
 
     public String getRepoCmd(String clazzName) {
@@ -412,6 +428,7 @@ public final class Configuration {
     public boolean isAllowLeadingWildcard() {
         return allowLeadingWildcard;
     }
+
     private boolean quickContextScan;
 
     public boolean isQuickContextScan() {
@@ -533,6 +550,15 @@ public final class Configuration {
     public void setIndexVersionedFilesOnly(boolean indexVersionedFilesOnly) {
         this.indexVersionedFilesOnly = indexVersionedFilesOnly;
     }
+    
+    public boolean isTagsEnabled() {
+        return this.tagsEnabled;
+    }
+    
+    public void setTagsEnabled(boolean tagsEnabled) {
+        this.tagsEnabled = tagsEnabled;
+    }
+
     private transient Date lastModified;
 
     /**
@@ -560,7 +586,7 @@ public final class Configuration {
         try {
             fin = new FileReader(file);
             input = new BufferedReader(fin);
-            String line = null;
+            String line;
             StringBuilder contents = new StringBuilder();
             String EOL = System.getProperty("line.separator");
             while ((line = input.readLine()) != null) {
@@ -572,7 +598,7 @@ public final class Configuration {
              * should usually not happen
              */
         } catch (java.io.IOException e) {
-            logger.warning("failed to read header include file: " + e.getMessage());
+            logger.log(Level.WARNING, "failed to read header include file: {0}", e.getMessage());
         } finally {
             if (input != null) {
                 try {
@@ -590,11 +616,13 @@ public final class Configuration {
         }
         return "";
     }
+
     /**
      * The name of the file relative to the <var>DATA_ROOT</var>, which should
      * be included into the footer of generated web pages.
      */
     public static final String FOOTER_INCLUDE_FILE = "footer_include";
+    
     private transient String footer = null;
 
     /**
@@ -609,11 +637,13 @@ public final class Configuration {
         }
         return footer;
     }
+
     /**
      * The name of the file relative to the <var>DATA_ROOT</var>, which should
      * be included into the footer of generated web pages.
      */
     public static final String HEADER_INCLUDE_FILE = "header_include";
+
     private transient String header = null;
 
     /**
@@ -628,6 +658,7 @@ public final class Configuration {
         }
         return header;
     }
+
     /**
      * The name of the eftar file relative to the <var>DATA_ROOT</var>, which
      * contains definition tags.
@@ -707,11 +738,8 @@ public final class Configuration {
      * @throws IOException if an error occurs
      */
     public void write(File file) throws IOException {
-        final FileOutputStream out = new FileOutputStream(file);
-        try {
+        try (FileOutputStream out = new FileOutputStream(file)) {
             this.encodeObject(out);
-        } finally {
-            IOUtils.close(out);
         }
     }
 
@@ -722,17 +750,14 @@ public final class Configuration {
     }
 
     private void encodeObject(OutputStream out) {
-        XMLEncoder e = new XMLEncoder(new BufferedOutputStream(out));
-        e.writeObject(this);
-        e.close();
+        try (XMLEncoder e = new XMLEncoder(new BufferedOutputStream(out))) {
+            e.writeObject(this);
+        }
     }
 
     public static Configuration read(File file) throws IOException {
-        final FileInputStream in = new FileInputStream(file);
-        try {
+        try (FileInputStream in = new FileInputStream(file)) {
             return decodeObject(in);
-        } finally {
-            IOUtils.close(in);
         }
     }
 
@@ -744,13 +769,15 @@ public final class Configuration {
     }
 
     private static Configuration decodeObject(InputStream in) throws IOException {
-        XMLDecoder d = new XMLDecoder(new BufferedInputStream(in));
-        final Object ret = d.readObject();
-        d.close();
+        final Object ret;
+        try (XMLDecoder d = new XMLDecoder(new BufferedInputStream(in))) {
+            ret = d.readObject();
+        }
 
         if (!(ret instanceof Configuration)) {
             throw new IOException("Not a valid config file");
         }
         return (Configuration) ret;
     }
+
 }

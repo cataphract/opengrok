@@ -52,6 +52,8 @@
 #   - OPENGROK_DERBY              if set, then indexer tries to use derby as
 #                                 historycache (see derby command of this
 #                                 script)
+#   - OPENGROK_TAG                Enable parsing of revision tags into the History
+#                                 view
 #   - READ_XML_CONFIGURATION      file with read only configuration
 #                                 - temporary workaround for bug # 327
 #
@@ -64,7 +66,7 @@
 #
 
 #
-# Print usage to stderr and exit.
+# Print usage to stdout and exit.
 #
 Usage()
 {
@@ -308,6 +310,14 @@ ${BZR:+-Dorg.opensolaris.opengrok.history.Bazaar=$BZR} \
         DERBY_HISTORY_CACHE="-D"
     fi
 
+    # OPTIONAL: Show revision tags in History view.
+    #		Turn this off if you want to increase indexing performance a bit
+    #           (default: off)
+    if [ -n "${OPENGROK_TAG}" ]
+    then
+        HISTORY_TAGS="-G"
+    fi
+
     # DELIVERED: An update program for EftarFile
     # Usage: <class> inputFile [inputFile ...] outputFile
     # EftarFile == An Extremely Fast Tagged Attribute Read-only File System
@@ -429,7 +439,7 @@ FindJavaHome()
 {
     javaHome=""
     case "${OS_NAME}:${OS_VERSION}" in
-        SunOS:5.10) javaHome="/usr/jdk/instances/jdk1.6.0" ;;
+        SunOS:5.10) javaHome="/usr/jdk/instances/jdk1.7.0" ;;
         SunOS:5.11) javaHome="/usr/jdk/latest"             ;;
         Linux:*)
             if [ -f /etc/alternatives/java ]
@@ -437,24 +447,13 @@ FindJavaHome()
                javaHome=`ls -l /etc/alternatives/java | cut -f 2 -d \> `
                javaHome=`dirname $javaHome`
                javaHome=`dirname $javaHome`
-            else
-               for dir in /usr/lib/jvm/sun-jdk-1.6 \
-                          /usr/lib/jvm/sun-jre-1.6 \
-                          /usr/lib/jvm/java-6-sun
-               do
-                  if [ -f ${dir}/bin/java ]
-                  then
-                     javaHome=$dir
-                     break;
-                  fi
-               done
             fi
             ;;
     esac
 
     if [ -z "${javaHome}" ]
     then
-        Error "Unable to determine Java 6 Home" \
+        Error "Unable to determine Java 7 Home" \
               "for ${OS_NAME} ${OS_VERSION}"
         return
     fi
@@ -735,6 +734,7 @@ StdInvocation()
         -jar ${OPENGROK_JAR}                                    \
         ${IGNORE_PATTERNS} ${ENABLE_PROJECTS}                   \
         ${DERBY_HISTORY_CACHE}                                  \
+        ${HISTORY_TAGS}						\
         ${SCAN_FOR_REPOSITORY} ${REMOTE_REPOSITORIES}           \
         ${SCAN_DEPTH}                                           \
         ${VERBOSE} ${QUIET}                                     \

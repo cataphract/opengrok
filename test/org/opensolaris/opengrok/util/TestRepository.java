@@ -27,8 +27,8 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import org.opensolaris.opengrok.configuration.RuntimeEnvironment;
 import static org.junit.Assert.*;
+import org.opensolaris.opengrok.configuration.RuntimeEnvironment;
 
 /**
  * A source repository to be used during a test
@@ -76,7 +76,7 @@ public class TestRepository {
         if (dataRoot != null) {
             FileUtilities.removeDirs(dataRoot);
         }
-    }
+    }    
 
     public String getSourceRoot() {
         return sourceRoot.getAbsolutePath();
@@ -85,4 +85,18 @@ public class TestRepository {
     public String getDataRoot() {
         return dataRoot.getAbsolutePath();
     }
+        
+    private final static String dummyS="dummy";
+    public void addDummyFile(String project) throws IOException {
+        File dummy = new File(getSourceRoot()+File.separator+project+File.separator+dummyS);
+        if (!dummy.exists() ) { 
+            dummy.createNewFile();
+        }        
+    }
+    
+    public void removeDummyFile(String project) {
+        File dummy = new File(getSourceRoot()+File.separator+project+File.separator+dummyS);
+        dummy.delete();        
+    }
+    
 }
